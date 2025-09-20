@@ -1,252 +1,286 @@
 #!/usr/bin/env python3
 """
-HCO-FindPhone (Single-file Termux-ready Lost-Phone Helper server)
-File: hco_findphone_termux.py
+HCO-FindPhone — Simple Termux server + auto-tunnel
+Single-file. Run in Termux. Shows live phone location and prints lat/lon in Termux console.
+
 Usage (Termux):
-  pkg install python
+  pkg install python openssh termux-api jq curl -y
   pip install flask
-  python3 hco_findphone_termux.py
+  python3 hco_findphone_simple_tunnel.py
 
-What it provides:
- - /register  (POST JSON: {"device_id":"<id>","name":"My Phone"}) -> returns token
- - /beacon    (POST JSON: {"lat":..,"lon":..}) with header Authorization: Bearer <token>
- - /dashboard (GET) simple web UI showing devices + last known location (links to Google Maps)
- - /beacons/<device_id> (GET) returns JSON history for a device (for debugging)
- - Database: lostphone.db (SQLite)
+What it does:
+ - Uses `termux-location -j` to read GPS periodically (requires you to grant location permission).
+ - Runs a Flask server on 0.0.0.0:5000 with:
+     /device       -> map page showing latest location
+     /last.json    -> latest location JSON {found,lat,lon,ts}
+ - Attempts to create a public URL using ssh.localhost.run (reverse SSH).
+   If successful it will print the public URL. Otherwise it'll print the LAN URL.
+ - Prints updates (lat/lon/timestamp) to Termux console so you can monitor live.
+ - Legal: Only track devices you own/are authorized to track.
 
-Security notes:
- - This is a starter prototype. For production use add HTTPS, stronger auth, rate-limiting,
-   input validation, token rotation, and other hardening.
- - Use only on devices you own and with explicit consent. Do NOT use to track others.
-
-Author: Hackers Colony — prototype by Azhar (for legitimate, ethical use only)
-Tool name: HCO-FindPhone
+Author: Hackers Colony (Azhar) — prototype. For ethical use only.
 """
 
-from flask import Flask, request, jsonify, g, render_template_string, redirect, url_for
-import sqlite3, os, secrets, time
+import os, subprocess, threading, time, json, sqlite3, secrets, signal
 from datetime import datetime
+from flask import Flask, jsonify, render_template_string, request
 
 # Config
-DB_PATH = "hco_findphone.db"
-APP_HOST = "0.0.0.0"
-APP_PORT = 5000
-BEACON_RETENTION = 10000  # keep recent rows cap (not enforced strictly here)
+DB = "hco_findphone_simple.db"
+POLL_INTERVAL = 10      # seconds between GPS reads
+FLASK_HOST = "0.0.0.0"
+FLASK_PORT = 5000
+USE_TUNNEL = True       # attempt ssh.localhost.run tunnel by default
+DEVICE_ID = "termux-phone-1"
 
 app = Flask(__name__)
+_latest = {"found": False}   # in-memory latest location (also stored in sqlite)
+ssh_proc = None
 
-# ---------- Database helpers ----------
-def get_db():
-    db = getattr(g, "_db", None)
-    if db is None:
-        db = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-        db.row_factory = sqlite3.Row
-        g._db = db
-    return db
-
+# --- DB (simple) ---
 def init_db():
-    if not os.path.exists(DB_PATH):
-        db = sqlite3.connect(DB_PATH)
-        c = db.cursor()
-        c.execute("""
-            CREATE TABLE users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT
-            );
-        """)
-        c.execute("""
-            CREATE TABLE devices (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                token TEXT,
-                registered_at TEXT
-            );
-        """)
-        c.execute("""
-            CREATE TABLE beacons (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT,
-                lat REAL,
-                lon REAL,
-                ts TEXT,
-                ip TEXT,
-                wifi TEXT
-            );
-        """)
-        db.commit()
-        db.close()
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS beacons (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 lat REAL, lon REAL, ts TEXT)""")
+    conn.commit()
+    conn.close()
 
-@app.teardown_appcontext
-def close_db(exc):
-    db = getattr(g, "_db", None)
-    if db is not None:
-        db.close()
+def save_beacon(lat, lon, ts):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("INSERT INTO beacons (lat,lon,ts) VALUES (?,?,?)",(lat,lon,ts))
+    conn.commit()
+    conn.close()
 
-# ---------- Utility ----------
-def generate_token():
-    return secrets.token_hex(24)
-
-def now_iso():
-    return datetime.utcnow().isoformat()
-
-def device_by_token(token):
-    db = get_db()
-    cur = db.execute("SELECT id, name FROM devices WHERE token = ?", (token,))
-    row = cur.fetchone()
-    return row
-
-# ---------- Endpoints ----------
-@app.route("/")
-def index():
-    return redirect(url_for("dashboard"))
-
-@app.route("/register", methods=["POST"])
-def register():
+# --- Termux location reader ---
+def read_termux_location():
     """
-    Register a device.
-    JSON input: {"device_id":"<some-unique-id>","name":"My Phone"}
-    Response: {"success":true,"token":"<token>"}
+    Calls `termux-location -j` and parses the JSON output.
+    Returns (lat, lon) or None on failure.
     """
-    data = request.get_json(force=True, silent=True) or {}
-    device_id = (data.get("device_id") or "").strip()
-    name = (data.get("name") or "").strip() or "Unnamed"
-    if not device_id:
-        return jsonify(error="device_id required"), 400
-
-    token = generate_token()
-    db = get_db()
-    db.execute("INSERT OR REPLACE INTO devices (id,name,token,registered_at) VALUES (?,?,?,?)",
-               (device_id, name, token, now_iso()))
-    db.commit()
-    return jsonify(success=True, token=token, device_id=device_id)
-
-@app.route("/beacon", methods=["POST"])
-def beacon():
-    """
-    Send a beacon from the device.
-    Header: Authorization: Bearer <token>
-    JSON body: {"lat": xx.xxxx, "lon": yy.yyyy, "wifi": "SSID (optional)"}
-    """
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return jsonify(error="missing bearer token"), 401
-    token = auth.split(" ",1)[1].strip()
-    dev = device_by_token(token)
-    if not dev:
-        return jsonify(error="invalid token"), 403
-    data = request.get_json(force=True, silent=True) or {}
     try:
-        lat = float(data.get("lat"))
-        lon = float(data.get("lon"))
-    except Exception:
-        return jsonify(error="lat and lon numeric required"), 400
-    wifi = data.get("wifi")
-    ip = request.remote_addr
-    ts = now_iso()
-    db = get_db()
-    db.execute("INSERT INTO beacons (device_id,lat,lon,ts,ip,wifi) VALUES (?,?,?,?,?,?)",
-               (dev["id"], lat, lon, ts, ip, wifi))
-    db.commit()
-    return jsonify(success=True, ts=ts)
+        # termux-location -j returns JSON with "latitude" and "longitude"
+        p = subprocess.run(["termux-location","-j"], capture_output=True, text=True, timeout=15)
+        out = p.stdout.strip()
+        if not out:
+            return None
+        j = json.loads(out)
+        lat = j.get("latitude")
+        lon = j.get("longitude")
+        if lat is None or lon is None:
+            return None
+        return float(lat), float(lon)
+    except Exception as e:
+        return None
 
-@app.route("/beacons/<device_id>", methods=["GET"])
-def beacons(device_id):
-    # Return list of beacons (JSON) - for debugging
-    db = get_db()
-    cur = db.execute("SELECT id,lat,lon,ts,ip,wifi FROM beacons WHERE device_id=? ORDER BY id DESC LIMIT 200", (device_id,))
-    rows = [dict(r) for r in cur.fetchall()]
-    return jsonify(device_id=device_id, beacons=rows)
+def poll_location_loop():
+    global _latest
+    print("[*] Starting location poll loop (interval {}s). Make sure Termux location permission is granted.".format(POLL_INTERVAL))
+    while True:
+        loc = read_termux_location()
+        ts = datetime.utcnow().isoformat()
+        if loc:
+            lat, lon = loc
+            _latest = {"found": True, "lat": lat, "lon": lon, "ts": ts}
+            save_beacon(lat, lon, ts)
+            print(f"[{ts}] LOCATION -> lat: {lat} lon: {lon}")
+        else:
+            # keep _latest as-is but print a warning
+            print(f"[{ts}] WARNING -> termux-location failed or returned no GPS. Make sure permissions are granted.")
+        time.sleep(POLL_INTERVAL)
 
-# ---------- Dashboard ----------
-DASH_TEMPLATE = """
+# --- Try to start reverse SSH tunnel via ssh.localhost.run ---
+def start_ssh_tunnel():
+    """
+    Uses ssh to create a reverse tunnel via ssh.localhost.run:
+    ssh -o StrictHostKeyChecking=no -R 80:localhost:5000 ssh.localhost.run
+    This service prints a line containing the public URL; we attempt to parse it.
+    """
+    global ssh_proc
+    try:
+        # check if ssh exists
+        if not shutil_which("ssh"):
+            print("[!] ssh not found. Install openssh: pkg install openssh")
+            return None
+        cmd = ["ssh","-o","StrictHostKeyChecking=no","-o","ExitOnForwardFailure=yes","-R","80:localhost:5000","ssh.localhost.run"]
+        print("[*] Attempting to create public tunnel via ssh.localhost.run ...")
+        # start process and capture output lines
+        ssh_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        url = None
+        start = time.time()
+        # read lines until we find a forwarding URL or timeout
+        while True:
+            if ssh_proc.stdout is None:
+                break
+            line = ssh_proc.stdout.readline()
+            if not line:
+                # check if process ended
+                if ssh_proc.poll() is not None:
+                    break
+                # else continue waiting
+                time.sleep(0.1)
+                if time.time() - start > 15:
+                    break
+                continue
+            line = line.strip()
+            # example output (may vary): "Forwarding HTTP traffic from https://abc123ssh.localhost.run"
+            if "Forwarding HTTP traffic from" in line or "https://" in line:
+                # attempt to extract https://... substring
+                import re
+                m = re.search(r"https?://[^\s]+", line)
+                if m:
+                    url = m.group(0)
+                    break
+            # some versions print: "serving on https://..."
+            if "serving on" in line:
+                import re
+                m = re.search(r"https?://[^\s]+", line)
+                if m:
+                    url = m.group(0); break
+            # safety timeout
+            if time.time() - start > 20:
+                break
+        if url:
+            print(f"[*] Public URL: {url}")
+            return url
+        else:
+            print("[!] Could not detect public URL from ssh output. Tunnel may have failed or service changed.")
+            return None
+    except Exception as e:
+        print("[!] SSH tunnel failed:", e)
+        return None
+
+# helper: shutil.which replacement (avoid extra import issues)
+def shutil_which(name):
+    for p in os.environ.get("PATH","").split(":"):
+        f = os.path.join(p, name)
+        if os.path.isfile(f) and os.access(f, os.X_OK):
+            return f
+    return None
+
+# --- Flask endpoints ---
+MAP_HTML = """
 <!doctype html>
-<title>HCO-FindPhone Dashboard</title>
-<style>
-body{font-family:Inter,Helvetica,Arial;margin:18px;background:#0b0b0c;color:#e9eef6}
-.card{background:#0f1720;padding:12px;border-radius:8px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-h1{font-size:20px}
-table{width:100%;border-collapse:collapse}
-th,td{padding:8px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.04)}
-.small{font-size:12px;color:#9aa6b2}
-a{color:#76c7ff;text-decoration:none}
-.badge{display:inline-block;padding:4px 8px;border-radius:6px;background:#1f2937;color:#dbeafe;font-weight:600;font-size:12px}
-</style>
-<h1>HCO-FindPhone — Dashboard</h1>
-<p class="small">Prototype server running at <strong>{{host}}:{{port}}</strong>. Use on your own devices only.</p>
-<div class="card">
-  <h3>Registered devices</h3>
-  {% if devices %}
-  <table>
-    <tr><th>Device ID</th><th>Name</th><th>Registered</th><th>Last Beacon</th><th>Action</th></tr>
-    {% for d in devices %}
-      <tr>
-        <td><code>{{d.id}}</code></td>
-        <td>{{d.name}}</td>
-        <td class="small">{{d.registered_at}}</td>
-        <td>
-          {% if d.last %}
-            <div><span class="small">{{d.last.ts}}</span></div>
-            <div>Lat: {{d.last.lat}} Lon: {{d.last.lon}}</div>
-            <div class="small">IP: {{d.last.ip}} {% if d.last.wifi %} • WiFi: {{d.last.wifi}}{% endif %}</div>
-            <div><a href="https://www.google.com/maps/search/?api=1&query={{d.last.lat}},{{d.last.lon}}" target="_blank">Open in Google Maps</a></div>
-          {% else %}
-            <span class="small">No beacons yet</span>
-          {% endif %}
-        </td>
-        <td>
-          <div class="small">Token: <code style="word-break:break-all">{{d.token[:12]}}…</code></div>
-          <div style="margin-top:6px"><a href="/beacons/{{d.id}}">View history (JSON)</a></div>
-        </td>
-      </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-    <div class="small">No devices registered yet. Use POST /register to add one.</div>
-  {% endif %}
-</div>
-
-<div class="card small">
-  <strong>Quick register example (use on device):</strong>
-  <pre style="background:#071024;padding:10px;border-radius:6px;color:#bfeeff">
-curl -X POST -H "Content-Type: application/json" -d '{"device_id":"myphone-01","name":"Azhar Phone"}' http://{{host}}:{{port}}/register
-  </pre>
-  <strong>Quick beacon example (use on device after you get token):</strong>
-  <pre style="background:#071024;padding:10px;border-radius:6px;color:#bfeeff">
-curl -X POST -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
-  -d '{"lat":12.9716,"lon":77.5946,"wifi":"HomeWiFi"}' \
-  http://{{host}}:{{port}}/beacon
-  </pre>
-</div>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HCO-FindPhone Live</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style> html,body,#map{height:100%;margin:0;padding:0} body{font-family:Arial;background:#111;color:#eee} .info{position:absolute;z-index:600;left:8px;top:8px;background:#0008;padding:8px;border-radius:6px} a{color:#7fd1ff}</style>
+</head>
+<body>
+  <div class="info"><strong>HCO-FindPhone</strong><br><span id="ts">—</span></div>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([20,0],2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    let marker = null;
+    async function refresh(){
+      try{
+        let r = await fetch('/last.json');
+        let j = await r.json();
+        if(!j.found){ document.getElementById('ts').innerText='No location yet'; return;}
+        document.getElementById('ts').innerText = 'Last: '+j.ts+' • lat:'+j.lat+' lon:'+j.lon;
+        const lat = parseFloat(j.lat), lon = parseFloat(j.lon);
+        if(!isNaN(lat) && !isNaN(lon)){
+          if(marker) marker.setLatLng([lat,lon]);
+          else marker = L.marker([lat,lon]).addTo(map);
+          map.setView([lat,lon],15);
+        }
+      }catch(e){ console.error(e); }
+    }
+    refresh();
+    setInterval(refresh, 8000);
+  </script>
+</body>
+</html>
 """
 
-@app.route("/dashboard")
-def dashboard():
-    db = get_db()
-    cur = db.execute("SELECT id,name,token,registered_at FROM devices ORDER BY registered_at DESC")
-    devices = []
-    for r in cur.fetchall():
-        last = db.execute("SELECT lat,lon,ts,ip,wifi FROM beacons WHERE device_id=? ORDER BY id DESC LIMIT 1", (r["id"],)).fetchone()
-        lastd = dict(last) if last else None
-        devices.append({"id": r["id"], "name": r["name"], "token": r["token"], "registered_at": r["registered_at"], "last": lastd})
-    return render_template_string(DASH_TEMPLATE, devices=devices, host=APP_HOST, port=APP_PORT)
+@app.route("/")
+def index():
+    # log the visit in Termux console
+    print(f"[{datetime.utcnow().isoformat()}] WEB: / visited from {request.remote_addr}")
+    return render_template_string(MAP_HTML)
 
-# ---------- CLI / Run ----------
-def print_banner():
+@app.route("/last.json")
+def last_json():
+    return jsonify(_latest)
+
+@app.route("/health")
+def health():
+    return jsonify(status="ok", device=DEVICE_ID)
+
+# --- signal handling and cleanup ---
+def cleanup_and_exit(signum, frame):
+    print("[*] Exiting, cleaning up...")
+    try:
+        if ssh_proc and ssh_proc.poll() is None:
+            ssh_proc.terminate()
+    except:
+        pass
+    os._exit(0)
+
+signal.signal(signal.SIGINT, cleanup_and_exit)
+signal.signal(signal.SIGTERM, cleanup_and_exit)
+
+# --- Main runner ---
+def main():
+    import threading
+    init_db()
+
+    # start background thread to poll location
+    t = threading.Thread(target=poll_location_loop, daemon=True)
+    t.start()
+
+    public_url = None
+    if USE_TUNNEL:
+        # attempt to start ssh tunnel in a thread to avoid blocking
+        def start_tunnel_thread():
+            nonlocal public_url
+            url = start_ssh_tunnel()
+            if url:
+                public_url = url
+        th = threading.Thread(target=start_tunnel_thread, daemon=True)
+        th.start()
+        # give it a few seconds to come up
+        time.sleep(3)
+
+    # compute LAN URL
+    lan_ip = get_local_ip() or "localhost"
+    lan_url = f"http://{lan_ip}:{FLASK_PORT}"
+
+    # print startup info
     print("="*60)
-    print("HCO-FindPhone (Termux-ready single-file server)")
-    print(f"DB: {DB_PATH}")
-    print("Endpoints:")
-    print("  POST /register  -> register device (returns token)")
-    print("  POST /beacon    -> send location (Authorization: Bearer <token>)")
-    print("  GET  /dashboard -> web UI")
-    print("  GET  /beacons/<device_id> -> JSON history")
+    print("HCO-FindPhone (simple) — running")
+    print(f"Device ID: {DEVICE_ID}")
+    if public_url:
+        print(f"Public URL: {public_url}")
+    else:
+        print("Public URL: (not available)")
+    print(f"LAN URL: {lan_url}")
+    print("Open the public URL (or LAN URL if same WiFi) on another device to view live location.")
+    print("Termux console will print lat/lon updates.")
     print("="*60)
-    print("Legal: Use only on devices you own. Do NOT track others without consent.\n")
+
+    # run Flask (blocking)
+    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=False)
+
+# --- helper to get local IP ---
+def get_local_ip():
+    # tries common interfaces
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # doesn't have to connect; just used to get the OS-chosen source IP
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return None
 
 if __name__ == "__main__":
-    init_db()
-    print_banner()
-    # Simple dev server. For Termux you can run: python3 hco_findphone_termux.py
-    # To run detached in background in Termux:
-    #   nohup python3 hco_findphone_termux.py &> hco.log &
-    app.run(host=APP_HOST, port=APP_PORT, debug=False)
+    main()
