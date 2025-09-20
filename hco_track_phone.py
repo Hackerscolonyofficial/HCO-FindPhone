@@ -1,5 +1,7 @@
-    # First show tool lock and YouTube redirect
-    tool_lock_youtube()
+    # Install requirements
+    if not install_requirements():
+        print(f"{RED}Failed to install requirements. Exiting.{RESET}")
+        sys.exit(1)
     
     # Clear screen after YouTube redirect
     os.system(CLEAR)
