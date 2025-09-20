@@ -1,7 +1,7 @@
-# HCO Find Phone by Azhar - Fully Automatic Termux Version
-# Requirements: Termux, Python3, Flask, cloudflared, Termux:API
+# HCO Find Phone by Azhar - Local Network Version
+# Requirements: Termux, Python3, Flask, Termux:API, qrcode
 
-import os, subprocess, threading, time, re, sys
+import os, subprocess, threading, time, socket, sys
 from flask import Flask, request, render_template_string, jsonify
 
 # Color codes with bold
@@ -17,8 +17,33 @@ CLEAR = "\033[2J\033[H"
 
 locations = {}
 app = Flask(__name__)
-cloudflared_process = None
-cloudflare_link = ""
+
+# ---------------- Find IP address -----------------
+def get_local_ip():
+    try:
+        # Connect to a remote server to determine local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
+# ---------------- Find available port -----------------
+def find_available_port():
+    for port in range(8080, 8100):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('0.0.0.0', port))
+                return port
+            except:
+                continue
+    return 8080  # Fallback
+
+SERVER_PORT = find_available_port()
+LOCAL_IP = get_local_ip()
+TRACKING_URL = f"http://{LOCAL_IP}:{SERVER_PORT}"
 
 # ---------------- Flask routes -----------------
 dashboard_template = """
@@ -122,7 +147,7 @@ def start_server():
     import logging
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=SERVER_PORT, debug=False, use_reloader=False)
 
 # ---------------- Tool lock + countdown + YouTube -----------------
 def tool_lock_youtube():
@@ -148,74 +173,38 @@ def tool_lock_youtube():
     
     input(f"\n{YELLOW}Press ENTER after returning from YouTube...{RESET}")
 
-# ---------------- Start cloudflared tunnel and capture URL automatically -----------------
-def start_cloudflared():
-    global cloudflare_link
-    
-    print(f"{YELLOW}Starting Cloudflare tunnel...{RESET}")
-    
-    # Check if cloudflared is installed
+# ---------------- Generate QR Code -----------------
+def generate_qr_code():
     try:
-        result = subprocess.run(["cloudflared", "--version"], 
-                               capture_output=True, text=True, timeout=5)
-        if result.returncode != 0:
-            print(f"{RED}Cloudflared not found. Installing...{RESET}")
-            subprocess.run(["pkg", "install", "cloudflared", "-y"], 
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except:
-        print(f"{RED}Cloudflared not found. Installing...{RESET}")
-        subprocess.run(["pkg", "install", "cloudflared", "-y"], 
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(5)
-    
-    # Kill any existing cloudflared processes
-    subprocess.run(["pkill", "-f", "cloudflared"], 
-                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(2)
-    
-    # Start cloudflared in a separate process
-    try:
-        # Use a different approach - run cloudflared with nohup
-        subprocess.Popen([
-            "nohup", "cloudflared", "tunnel", "--url", "http://localhost:5000"
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        # Wait for tunnel to establish
-        time.sleep(8)
-        
-        # Try to get the URL using the cloudflared command
+        # Install qrcode if not available
         try:
-            result = subprocess.run([
-                "timeout", "10", "cloudflared", "tunnel", "--url", "http://localhost:5000"
-            ], capture_output=True, text=True, timeout=15)
-            
-            # Search for the URL in the output
-            output = result.stderr + result.stdout
-            for line in output.split('\n'):
-                if "https://" in line and "trycloudflare.com" in line:
-                    match = re.search(r"(https://[^\s]+\.trycloudflare\.com)", line)
-                    if match:
-                        cloudflare_link = match.group(1)
-                        print(f"{GREEN}Cloudflare URL found: {cloudflare_link}{RESET}")
-                        return cloudflare_link
+            import qrcode
         except:
-            pass
+            print(f"{YELLOW}Installing QR code generator...{RESET}")
+            subprocess.run(["pip", "install", "qrcode[pil]"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            import qrcode
         
-        # If we couldn't get the URL automatically, use manual method
-        print(f"{YELLOW}Could not automatically detect Cloudflare URL.{RESET}")
-        print(f"{YELLOW}Please start cloudflared manually in a NEW Termux tab:{RESET}")
-        print(f"{CYAN}cloudflared tunnel --url http://localhost:5000{RESET}")
-        print(f"{YELLOW}Wait for it to generate a URL, then paste it here:{RESET}")
-        cloudflare_link = input().strip()
+        # Generate QR code
+        qr = qrcode.QRCode(version=1, box_size=2, border=2)
+        qr.add_data(TRACKING_URL)
+        qr.make(fit=True)
         
+        # Create QR code image
+        img = qr.make_image(fill_color="red", back_color="black")
+        img_path = "/data/data/com.termux/files/home/tracking_qr.png"
+        img.save(img_path)
+        
+        # Display QR code in Termux
+        try:
+            subprocess.run(["termux-open", img_path], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"{GREEN}QR code generated and opened!{RESET}")
+        except:
+            print(f"{YELLOW}QR code saved to: {img_path}{RESET}")
+            
     except Exception as e:
-        print(f"{RED}Error starting cloudflared: {e}{RESET}")
-        print(f"{YELLOW}Please start cloudflared manually:{RESET}")
-        print(f"{CYAN}cloudflared tunnel --url http://localhost:5000{RESET}")
-        print(f"{YELLOW}Then paste the URL here:{RESET}")
-        cloudflare_link = input().strip()
-    
-    return cloudflare_link
+        print(f"{RED}Failed to generate QR code: {e}{RESET}")
 
 # ---------------- Display banner -----------------
 def display_banner():
@@ -223,11 +212,19 @@ def display_banner():
     print(f"{RED}{'='*80}{RESET}")
     print(f"{RED}{'HCO FIND PHONE BY AZHAR'.center(80)}{RESET}")
     print(f"{RED}{'='*80}{RESET}\n")
-    print(f"{GREEN}{'Send this link to the phone to track location:'.center(80)}{RESET}\n")
-    print(f"{CYAN}{cloudflare_link.center(80)}{RESET}\n")
-    print(f"{YELLOW}{'NOTE: It may take 30-60 seconds after opening the link'.center(80)}{RESET}")
-    print(f"{YELLOW}{'for the location page to appear (Cloudflare tunnel setup)'.center(80)}{RESET}")
+    print(f"{GREEN}{'Scan the QR code or open this URL on target phone:'.center(80)}{RESET}\n")
+    print(f"{CYAN}{TRACKING_URL.center(80)}{RESET}\n")
+    print(f"{YELLOW}{'IMPORTANT: Both devices must be on same WiFi network'.center(80)}{RESET}")
     print(f"{MAGENTA}{'Press Ctrl+C to exit'.center(80)}{RESET}\n")
+
+# ---------------- Check if server is running -----------------
+def check_server_running():
+    try:
+        import requests
+        response = requests.get(f"http://localhost:{SERVER_PORT}", timeout=3)
+        return response.status_code == 200
+    except:
+        return False
 
 # ---------------- Main -----------------
 if __name__ == "__main__":
@@ -238,23 +235,45 @@ if __name__ == "__main__":
         # Clear screen after YouTube redirect
         os.system(CLEAR)
         print(f"{GREEN}Starting HCO Find Phone tool...{RESET}")
+        print(f"{YELLOW}Using port: {SERVER_PORT}{RESET}")
+        print(f"{YELLOW}Local IP: {LOCAL_IP}{RESET}")
+        
+        # Check if devices are on same network
+        if LOCAL_IP.startswith("127.") or LOCAL_IP.startswith("192.168.") or LOCAL_IP.startswith("10."):
+            print(f"{GREEN}Local network detected{RESET}")
+        else:
+            print(f"{YELLOW}Warning: Make sure both devices are on same WiFi network{RESET}")
         
         # Start Flask server
         print(f"{YELLOW}Starting server...{RESET}")
         server_thread = threading.Thread(target=start_server, daemon=True)
         server_thread.start()
         
-        # Wait a moment for the server to start
-        time.sleep(3)
+        # Wait for server to start
+        server_start_time = time.time()
+        server_ready = False
+        while time.time() - server_start_time < 30:
+            if check_server_running():
+                server_ready = True
+                break
+            time.sleep(1)
         
-        # Start Cloudflare tunnel and capture public URL
-        print(f"{YELLOW}Setting up Cloudflare tunnel...{RESET}")
-        print(f"{YELLOW}This may take 10-20 seconds...{RESET}")
-        cloudflare_url = start_cloudflared()
+        if not server_ready:
+            print(f"{RED}Server failed to start. Trying different port...{RESET}")
+            # Try to force kill anything on the port
+            subprocess.run(["fuser", "-k", f"{SERVER_PORT}/tcp"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(2)
+            server_thread = threading.Thread(target=start_server, daemon=True)
+            server_thread.start()
+            time.sleep(5)
         
-        # Give the tunnel more time to establish properly
-        print(f"{YELLOW}Waiting for tunnel to fully establish...{RESET}")
-        time.sleep(10)
+        print(f"{GREEN}Server started successfully on port {SERVER_PORT}!{RESET}")
+        
+        # Generate QR code
+        print(f"{YELLOW}Generating QR code...{RESET}")
+        generate_qr_code()
+        time.sleep(2)
         
         # Display banner with the link
         display_banner()
@@ -262,8 +281,16 @@ if __name__ == "__main__":
         # Live location printing in Termux
         last_location_time = 0
         connection_wait_time = time.time()
+        display_refresh_time = time.time()
         
         while True:
+            # Refresh display every 15 seconds to prevent clutter
+            current_time = time.time()
+            if current_time - display_refresh_time > 15:
+                os.system(CLEAR)
+                display_banner()
+                display_refresh_time = current_time
+                
             if locations and 'last_update' in locations:
                 current_time = time.time()
                 # Only update if we have a new location
@@ -277,24 +304,19 @@ if __name__ == "__main__":
                     print(f"{BLUE}{'-'*40}{RESET}")
             else:
                 # Show waiting message with elapsed time
-                elapsed = int(time.time() - connection_wait_time)
+                elapsed = int(current_time - connection_wait_time)
                 print(f"{YELLOW}Waiting for target phone to connect ({elapsed}s)...{RESET}")
-                print(f"{YELLOW}Open this URL on target phone: {CYAN}{cloudflare_url}{RESET}")
-                print(f"{YELLOW}If you see a Cloudflare page, wait 30-60 seconds and refresh{RESET}")
+                print(f"{YELLOW}Scan the QR code or open: {CYAN}{TRACKING_URL}{RESET}")
+                print(f"{YELLOW}Make sure both devices are on same WiFi network{RESET}")
                 print(f"{BLUE}{'-'*40}{RESET}")
             
             time.sleep(3)
             
     except KeyboardInterrupt:
         print(f"\n{RED}Shutting down...{RESET}")
-        try:
-            subprocess.run(["pkill", "-f", "cloudflared"], 
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except:
-            pass
         print(f"{GREEN}Thank you for using HCO Find Phone!{RESET}")
     except Exception as e:
         print(f"{RED}Error: {e}{RESET}")
         print(f"{YELLOW}Please make sure you have installed all requirements:{RESET}")
-        print(f"{CYAN}pkg install python cloudflared termux-api -y{RESET}")
-        print(f"{CYAN}pip install flask requests{RESET}")
+        print(f"{CYAN}pkg install python termux-api -y{RESET}")
+        print(f"{CYAN}pip install flask requests qrcode[pil]{RESET}")
