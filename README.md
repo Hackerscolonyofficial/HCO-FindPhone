@@ -26,7 +26,7 @@ Unauthorized tracking of devices is **illegal and unethical**.
 
 ## 🖥 Installation & Setup
 
-### Termux Installation
+### Termux Installation 📲 
 ```bash
 pkg update -y && pkg upgrade -y
 pkg install python -y
@@ -36,7 +36,9 @@ git clone https://github.com/YourUsername/HCO-Find-Phone.git
 cd HCO-Find-Phone
 python HCO-Find-Phone.py
 
-Linux Installation
+```
+### Linux Installation 🐧 
+```bash
 
 sudo apt update && sudo apt upgrade -y
 sudo apt install python3 python3-pip git -y
