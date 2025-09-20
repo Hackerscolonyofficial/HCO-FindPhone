@@ -1,108 +1,121 @@
-# HCO Find Phone 📍🔐
+# HCO Find Phone 🔍📱
 
-<div align="center">
-<img src="https://img.shields.io/badge/HCO-FindPhone-blue?style=for-the-badge&logo=appveyor" alt="HCO Find Phone Badge"/>
-<img src="https://img.shields.io/badge/Termux-Compatible-green?style=for-the-badge&logo=android" alt="Termux Badge"/>
-<img src="https://img.shields.io/badge/Linux-Compatible-yellow?style=for-the-badge&logo=linux" alt="Linux Badge"/>
-</div>
+[![YouTube](https://img.shields.io/badge/YouTube-Hackers_Colony_red)](https://youtube.com/@hackers_colony_tech?si=pvdCWZggTIuGb0ya)
+[![Python](https://img.shields.io/badge/Python-3.x-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
-## ⚠️ Disclaimer
-This tool is created **for educational purposes only**.  
-Use it **only on devices you own** or have explicit permission to test.  
-Unauthorized tracking of devices is **illegal and unethical**.  
+## Description
+
+**HCO Find Phone** by Azhar is a Termux-based educational tool for **tracking the location of your own devices**.  
+It generates a **Cloudflare tunnel link** that you can open on your phone. When the phone allows location access, your **live GPS coordinates** are displayed in Termux.  
+
+> ⚠️ **Disclaimer:** Only use on devices you own or have permission to track. Unauthorized tracking is illegal.
 
 ---
 
-## 💡 Features
-- Track your lost Android phone using device location  
-- Generate a **secure tracking link**  
-- Works on **Termux** and **Linux** terminals  
-- Hacker-style interactive interface  
-- Built-in **tool lock & YouTube redirect** for ethical practice  
+## Features
+
+- 🔒 **Tool Lock & YouTube Redirect:** The tool is locked. Unlock by subscribing and clicking the bell icon on YouTube.  
+- ⏳ **Countdown Timer:** Countdown before redirecting to YouTube.  
+- 🖥️ **Dashboard:** Displays **HCO Find Phone by Azhar** in large red letters.  
+- 🌐 **Cloudflare Tunnel:** Generates a public link to receive location data.  
+- 📍 **Live Location:** Displays target phone location live in Termux.  
+- ✅ **Single Python File:** No messy setup; all code in one file.  
 
 ---
 
-## 🖥 Installation & Setup
+## Requirements
 
-### Termux Installation 📲 
+- **Termux** on Android  
+- **Python 3.x**  
+- **Flask** Python package  
+- **Cloudflared** for public URL tunneling  
+
+---
+
+## Installation
+
+Open Termux and run the following commands:
+
 ```bash
-pkg update -y && pkg upgrade -y
+pkg update && pkg upgrade
 pkg install python -y
-pkg install git -y
-pip install flask requests
-git clone https://github.com/YourUsername/HCO-Find-Phone.git
-cd HCO-Find-Phone
-python HCO-Find-Phone.py
+pip install flask
+pkg install cloudflared -y
 
-```
-### Linux Installation 🐧 
-```bash
 
-sudo apt update && sudo apt upgrade -y
-sudo apt install python3 python3-pip git -y
-pip3 install flask requests
-git clone https://github.com/YourUsername/HCO-Find-Phone.git
-cd HCO-Find-Phone
-python3 HCO-Find-Phone.py
-
-```
 ---
 
-🚀 Usage
+Usage
 
-1. Run the script in Termux or Linux:
-
-
-
-python HCO-Find-Phone.py
-
-2. Follow the interactive dashboard prompts
+1. Save the script as HCO_FindPhone.py.
 
 
-3. Tool will generate a tracking link
+2. Run in Termux:
 
 
-4. Open the link on the target device (your own device for testing)
+
+python HCO_FindPhone.py
+
+3. Tool behavior:
 
 
-5. Location data will appear live in your terminal
+```
+🔒 Shows tool lock message and countdown.
 
+Opens YouTube app for unlock.
+
+After returning, displays HCO Find Phone by Azhar in big red letters.
+
+Shows a Cloudflare link to send to your target phone.
+
+Target opens link → browser asks permission → location sent to Termux dashboard.
+
+Live location updates appear automatically in Termux.
 
 
 
 ---
 
-🕵️‍♂️ Hacker Quote
+Notes
+
+Make sure your cloudflared tunnel is running properly.
+
+Replace YOUR_CLOUDFLARE_LINK in the script if you use manual tunnels.
+
+Ethical use only. Do not attempt to track someone without consent.
+
+
+
+---
+
+Screenshots
+
+[Optional: Add screenshots of Termux running HCO Find Phone]
+
+
+---
+
+License
+
+This project is licensed under the MIT License.
+You can view the license file here.
+
+
+---
+
+Credits
+
+Code by: Azhar
+
+Hackers Colony Official
+
+
+
+---
+
+Quote
 
 > "Knowledge is power, hacking is skill."
-
-
-
----
-
-📜 Code by Azhar
-
-This project is proudly made by Azhar for ethical hacking learning.
-
-
----
-
-🔐 Notes
-
-The tool includes a tool lock message for ethical demo purposes
-
-Always verify the link works on your device before sharing
-
-Compatible with Termux Android 15+ and Linux distros
-
-
-
----
-
-<div align="center">
-<img src="https://img.shields.io/badge/Code_by-Azhar-red?style=for-the-badge&logo=github" alt="Code by Azhar"/>
-</div>
-```
----
