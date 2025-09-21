@@ -1,53 +1,58 @@
-HCO Find Phone 🔍📱
+### HCO Track Phone by Azhar 🔍📱
 
-https://img.shields.io/badge/Python-3.x-blue?style=flat&logo=python
-https://img.shields.io/badge/License-MIT-green?style=flat
-https://img.shields.io/badge/Platform-Termux-orange?style=flat&logo=android
+![Python](https://img.shields.io/badge/Python-3.x-blue?style=flat&logo=python)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+![Platform](https://img.shields.io/badge/Platform-Termux-orange?style=flat&logo=android)
 
 A powerful Termux-based phone tracking tool that creates a Cloudflare tunnel to receive live location data from target devices.
 
-⚠️ IMPORTANT DISCLAIMER
+## ⚠️ IMPORTANT DISCLAIMER
 
-HCO Find Phone is for educational purposes only. Use this tool ONLY on devices YOU OWN or have EXPLICIT PERMISSION to track. Unauthorized tracking is illegal and unethical. The developers are not responsible for any misuse of this tool.
+**HCO Track Phone is for educational purposes only.** Use this tool **ONLY** on devices **YOU OWN** or have **EXPLICIT PERMISSION** to track. Unauthorized tracking is illegal and unethical. The developers are not responsible for any misuse of this tool.
 
-📋 Features
+## 📋 Features
 
-· 🔒 Tool Lock System - Requires YouTube subscription to unlock
-· ⏳ Countdown Timer - Before redirecting to YouTube channel
-· 🌐 Cloudflare Tunnel - Automatic public URL generation
-· 📍 Live Location Tracking - Real-time GPS coordinates in Termux
-· 📱 QR Code Generator - Easy sharing with target device
-· 🎯 Auto Permission Request - Automatically requests location access
-· ✅ Single File Solution - No complex setup required
+- 🔒 **Tool Lock System** - Requires YouTube subscription to unlock
+- ⏳ **Countdown Timer** - Before redirecting to YouTube channel
+- 🌐 **Cloudflare Tunnel** - Automatic public URL generation
+- 📍 **Live Location Tracking** - Real-time GPS coordinates in Termux
+- 📱 **QR Code Generator** - Easy sharing with target device
+- 🎯 **Auto Permission Request** - Automatically requests location access
+- ✅ **Single File Solution** - No complex setup required
 
-📥 Installation
+## 📥 Installation
 
-1. Update Termux:
+1. **Update Termux:**
    ```bash
-   pkg update && pkg upgrade -y
-   ```
-2. Install Python and dependencies:
+   apt update && apt upgrade -y
+```
+```
+1. Install Git and Python:
    ```bash
-   pkg install python wget -y
+   pkg install git python -y
    ```
-3. Install Python packages:
+2. Install Python packages:
    ```bash
    pip install flask requests qrcode[pil]
    ```
-4. Download the script:
+3. Clone the repository:
    ```bash
-   wget https://raw.githubusercontent.com/azhar/hco-find-phone/main/HCO_FindPhone.py
+   git clone https://github.com/Hackerscolonyofficial/HCO-Track-Phone.git
    ```
-5. Make it executable:
+4. Navigate to directory:
    ```bash
-   chmod +x HCO_FindPhone.py
+   cd HCO-Track-Phone
+   ```
+5. Run the script:
+   ```bash
+   python HCO_Track_Phone.py
    ```
 
 🚀 Usage
 
 1. Run the script:
    ```bash
-   python HCO_FindPhone.py
+   python HCO_Track_Phone.py
    ```
 2. Follow the unlock process:
    · Watch the countdown
@@ -95,7 +100,7 @@ When successfully running, you'll see:
 ```
 ╔══════════════════════════════════════════════════════╗
 ║                   🔒 TOOL LOCKED 🔒                  ║
-║               HCO FIND PHONE BY AZHAR                ║
+║               HCO TRACK PHONE by AZHAR               ║
 ║         Subscribe @hackers_colony_tech 🔔            ║
 ╚══════════════════════════════════════════════════════╝
 
@@ -157,3 +162,5 @@ Special Thanks: Cloudflare for tunneling service
 ---
 
 ⭐ If you find this tool useful, please give it a star on GitHub!
+
+```
